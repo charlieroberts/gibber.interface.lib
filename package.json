@@ -1,7 +1,7 @@
 {
   "name": "gibber.interface.lib",
   "version": "0.0.0",
-  "description": "standalone interface library from Gibber to use in node or in HTML documents",
+  "description": "standalone client interface library from Gibber",
   "repository": {
     "type": "git",
     "url": "git://github.com/charlieroberts/gibber.interface.lib"
@@ -15,12 +15,13 @@
     "gulp-insert": "~0.4.0",
     "gulp-browserify": "~0.5.0",
     "gulp-rename": "~1.2.0",
-    "interface.js": "0.0.0"
+    "interface.js": "0.0.0",
+    "gibber.core.lib": "~0.0.0"
   },
   "bugs": {
     "url": "https://github.com/charlieroberts/gibber.interface.lib/issues"
   },
-  "main": "./scripts/gibber/gibber.js",
+  "main": "./scripts/gibber/interface.js",
   "scripts": {},
   "keywords": [
     "interface",

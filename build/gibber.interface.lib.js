@@ -1,4 +1,1807 @@
 !function(e){if("object"==typeof exports)module.exports=e();else if("function"==typeof define&&define.amd)define(e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.Gibber=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+(function (global){
+!function() {
+
+"use strict"
+
+var hasZepto = typeof Zepto === 'function',
+    hasJQuery = typeof jQuery === 'function',
+    has$ = typeof global.$ === 'object' || typeof global.$ === 'function',
+    $ = null,
+    hasConflict = hasZepto || hasJQuery || has$,
+    isArray = Array.isArray,
+    isObject = function( obj ) { return typeof obj === 'object' },
+    isPlainObject = function( obj ) {
+      return isObject(obj) && Object.getPrototypeOf( obj ) == Object.prototype
+    }
+
+if( !hasConflict ) {
+  $ = {}
+}else if( hasJQuery ) {
+  $ = jQuery 
+}else if( hasZepto ) {
+  $ = Zepto
+}else if( has$ ){
+  $ = global.$
+}else{
+  $ = {}
+}
+
+// taken from Zepto: zeptojs.com
+function extend(target, source, deep) {
+  for (var key in source)
+    if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
+      if (isPlainObject(source[key]) && !isPlainObject(target[key]))
+        target[key] = {}
+      if (isArray(source[key]) && !isArray(target[key]))
+        target[key] = []
+      extend(target[key], source[key], deep)
+    }
+    else if (source[key] !== undefined) target[key] = source[key]
+}
+
+if( !hasConflict ) {
+  // Copy all but undefined properties from one or more
+  // objects to the `target` object.
+  $.extend = function( target ){
+    var deep, args = Array.prototype.slice.call(arguments, 1)
+
+    if (typeof target === 'boolean') {
+      deep = target
+      target = args.shift()
+    }
+    args.forEach(function(arg){ extend(target, arg, deep) })
+    return target
+  }
+  
+  $.isArray = Array.isArray 
+  $.isPlainObject = isPlainObject
+
+  $.type = function( val ) {
+    return typeof val
+  }
+}
+
+var events = {}
+$.subscribe   = function( key, fcn ) { 
+  if( typeof events[ key ] === 'undefined' ) {
+    events[ key ] = []
+  }
+  events[ key ].push( fcn )
+}
+
+$.unsubscribe = function( key, fcn ) {
+  if( typeof events[ key ] !== 'undefined' ) {
+    var arr = events[ key ]
+    
+    arr.splice( arr.indexOf( fcn ), 1 )
+  }
+}
+
+$.publish = function( key, data ) {
+  if( typeof events[ key ] !== 'undefined' ) {
+    var arr = events[ key ]
+    for( var i = 0; i < arr.length; i++ ) {
+      arr[ i ]( data )
+    }
+  }
+}
+
+module.exports = $
+
+}()
+}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}],2:[function(_dereq_,module,exports){
+(function() {
+//"use strict" 
+// can't use strict because eval is used to evaluate user code in the run method
+// I should wrap this in a Function call instead...
+var $ = _dereq_( './dollar' )
+
+var Gibber = {
+  dollar: $,
+  Presets: {},
+  GraphicsLib: {},
+  Binops: {},
+  scale : null,
+  minNoteFrequency:50,
+  started:false,
+  outputCurves : {
+    LINEAR:0,
+    LOGARITHMIC:1
+  },
+  
+  export: function( target ) {
+    Gibber.Utilities.export( target )
+    
+    if( Gibber.Audio ) {
+      Gibber.Audio.export( target )
+    }
+    
+    if( Gibber.Graphics ) {
+      Gibber.Graphics.export( target )
+    }
+    
+    if( Gibber.Interface ) {
+      Gibber.Interface.export( target )
+    }
+  },
+  
+  init: function( _options ) {                        
+      if( typeof window === 'undefined' ) { // check for node.js
+        window = GLOBAL // is this a good idea? makes a global window available in all files required in node
+        document = GLOBAL.document = false
+      }else if( typeof GLOBAL !== 'undefined' ) { // I can't remember why I put this in there...
+        if( !GLOBAL.document ) document = GLOBAL.document = false
+      }
+      
+      var options = {
+        globalize: true,
+        canvas: null,
+        target: window,
+        graphicsMode:'3d'
+      }
+      
+      if( typeof _options === 'object' ) $.extend( options, _options )
+      
+      if( Gibber.Audio ) {
+        Gibber.Audio.init() 
+      
+        if( options.globalize ) {
+          options.target.Master = Gibber.Audio.Master    
+        }else{
+          $.extend( Gibber, Gibber.Audio )
+        }        
+      }
+      
+      if( Gibber.Graphics ) {
+        // this happens dynamically when a graphics object is first created to save CPU
+        // Gibber.Graphics.init( options.graphicsMode ) 
+      }
+      
+      if( Gibber.Interface ) {}
+      
+      if( options.globalize ) {
+        Gibber.export( options.target )
+      }
+      
+      options.target.$ = $ // TODO: geez louise
+            
+      Gibber.Utilities.init()
+      
+      // Gibber.isInstrument = true
+  },
+  // interfaceIsReady : function() {
+  //   if( !Gibber.started ) {
+  //     if( typeof Gibber.Audio.context.currentTime !== 'undefined' ) {
+  //       Gibber.started = true
+  //       if( Gibber.isInstrument ) eval( loadFile.text )
+  //     }
+  //   }
+  // },
+  Modules : {},
+ 	import : function( path, exportTo ) {
+    var _done = null;
+    console.log( 'Loading module ' + path + '...' )
+
+    if( path.indexOf( 'http:' ) === -1 ) { 
+      console.log( 'loading via post', path )
+      $.post(
+        Gibber.Environment.SERVER_URL + '/gibber/'+path, {},
+        function( d ) {
+          d = JSON.parse( d )
+                    
+          var f = new Function( "return " + d.text )
+          
+          Gibber.Modules[ path ] = f()
+          
+          if( exportTo && Gibber.Modules[ path ] ) {
+            $.extend( exportTo, Gibber.Modules[ path ] )
+            //Gibber.Modules[ path ] = exportTo
+          }
+          if( Gibber.Modules[ path ] ) {
+            if( typeof Gibber.Modules[ path ].init === 'function' ) {
+              Gibber.Modules[ path ].init()
+            }
+            console.log( 'Module ' + path + ' is now loaded.' )
+          }else{
+            console.log( 'Publication ' + path + ' is loaded. It may not be a valid module.')
+          }
+          
+          if( _done !== null ) { _done( Gibber.Modules[ path ] ) }
+
+          return false;
+        }
+      )
+    }else{
+      var script = document.createElement( 'script' )
+      script.src = path
+      
+      script.onload = function () {
+        console.log( 'Module ' + path + ' is now loaded.' )
+        if( _done !== null ) { _done() }
+      };
+
+      document.head.appendChild( script )
+    }
+    return { done: function( fcn ) { _done =  fcn } }
+ 	},  
+  
+  // log: function( msg ) { 
+  //   //console.log( "LOG", typeof msg )
+  //   if( typeof msg !== 'undefined' ) {
+  //     if( typeof msg !== 'function') {
+  //       console.log( msg )
+  //     }else{
+  //       console.log( 'Function' )
+  //     }
+  //   }
+  // },
+  
+  scriptCallbacks: [],
+  
+  run: function( script, pos, cm ) { // called by Gibber.Environment.Keymap.modes.javascript
+		var _start = pos.start ? pos.start.line : pos.line,
+				tree
+    
+	  try{
+			tree = Gibber.Esprima.parse(script, { loc:true, range:true} )
+		}catch(e) {
+			console.error( "Parse error on line " + ( _start + e.lineNumber ) + " : " + e.message.split(':')[1] )
+			return
+		}
+    
+    // must wrap i with underscores to avoid confusion in the eval statement with commands that use proxy i
+    for( var __i__ = 0; __i__ < tree.body.length; __i__++ ) {
+      var obj = tree.body[ __i__ ],
+					start = { line:_start + obj.loc.start.line - 1, ch: obj.loc.start.column },
+					end   = { line:_start + obj.loc.end.line - 1, ch: obj.loc.end.column },
+				  src   = cm.getRange( start, end ),
+          result = null
+			
+			//console.log( start, end, src )
+			try{
+				result = eval( src )
+        if( typeof result !== 'function' ) {
+          log( result )
+        }else{
+          log( 'Function' )
+        }
+			}catch( e ) {
+				console.error( "Error evaluating expression beginning on line " + (start.line + 1) + '\n' + e.message )
+			}
+      
+      if( this.scriptCallbacks.length > 0 ) {
+        for( var ___i___ = 0; ___i___ < this.scriptCallbacks.length; ___i___++ ) {
+          this.scriptCallbacks[ ___i___ ]( obj, cm, pos, start, end, src, _start )
+        }
+      }
+    }
+  },
+  
+  processArguments: function(args, type) {    
+    var obj
+    
+    if( args.length ) {
+      if( typeof args[0] === 'string' && type !== 'Drums' && type !== 'XOX' ) {
+        obj = Gibber.getPreset( args[0], type )
+        
+        if( typeof args[1] == 'object' ) {
+          $.extend( obj, args[ 1 ] )
+        }
+        return obj
+      }
+      return Array.prototype.slice.call(args, 0)
+    }
+    
+    return obj
+  },
+  
+  processArguments2 : function(obj, args, type) {
+    if( args.length ) {
+      var firstArg = args[ 0 ]
+    
+      if( typeof firstArg === 'string' && type !== 'Drums' && type !== 'XOX' && type !== 'Shader' ) {
+        preset = Gibber.getPreset( args[0], type )
+      
+        if( typeof args[1] === 'object' ) {
+          $.extend( preset, args[ 1 ] )
+        }
+      
+        $.extend( obj, preset )
+        
+        if( obj.presetInit ) obj.presetInit() 
+      }else if( $.isPlainObject( firstArg ) && typeof firstArg.type === 'undefined' ) {
+        $.extend( obj, firstArg )
+      }else{
+        var keys = Object.keys( obj.properties )
+                
+        if( obj.type === 'FX' ) {
+          for( var i = 0; i < args.length; i++ ) { obj[ keys[ i + 1 ] ] = args[ i ] }
+        }else{
+          for( var i = 0; i < args.length; i++ ) { obj[ keys[ i ] ] = args[ i ] }
+        }
+        
+      }
+    }      
+  },
+    
+  getPreset: function( presetName, ugenType ) {
+    var obj = {}
+    
+    if( Gibber.Presets[ ugenType ] ) {
+      if( Gibber.Presets[ ugenType ][ presetName ] ) {
+        obj = Gibber.Presets[ ugenType ][ presetName ]
+      }else{
+        Gibber.log( ugenType + ' does not have a preset named ' + presetName + '.' )
+      }
+    }else{
+      Gibber.log( ugenType + ' does not have a preset named ' + presetName + '.' )
+    }
+    
+    return obj
+  },
+  
+  clear : function() {
+    if( Gibber.Audio ) Gibber.Audio.clear();
+    
+    if( Gibber.Graphics ) Gibber.Graphics.clear()
+
+    Gibber.proxy( window )
+		
+    $.publish( '/gibber/clear', {} )
+        
+    console.log( 'Gibber has been cleared.' )
+  },
+  
+  proxy: function( target ) {
+		var letters = "abcdefghijklmnopqrstuvwxyz"
+    
+		for(var l = 0; l < letters.length; l++) {
+			var lt = letters.charAt(l);
+      if( typeof window[ lt ] !== 'undefined' ) { 
+        delete window[ lt ] 
+        delete window[ '___' + lt ]
+      }
+
+      (function() {
+				var ltr = lt;
+      
+				Object.defineProperty( target, ltr, {
+          configurable: true,
+					get:function() { return target[ '___'+ltr] },
+					set:function( newObj ) {
+            if( newObj ) {
+              if( target[ '___'+ltr ] ) { 
+                if( typeof target[ '___'+ltr ].replaceWith === 'function' ) {
+                  target[ '___'+ltr ].replaceWith( newObj )
+                  console.log( target[ '___'+ltr ].name + ' was replaced with ' + newObj.name )
+                }
+              }
+              target[ '___'+ltr ] = newObj
+            }else{
+						  if( target[ '___'+ltr ] ) {
+						  	 var variable = target[ '___'+ltr ]
+						  	 if( variable ) {
+						  		 if( typeof variable.kill === 'function' /*&& target[ '___'+ltr ].destinations.length > 0 */) {
+						  			 variable.kill();
+						  		 }
+						  	 }
+						  }
+            }
+          }
+        });
+      })();     
+    }
+  },
+
+  construct: function( constructor, args ) {
+    function F() {
+      return constructor.apply( this, args );
+    }
+    F.prototype = constructor.prototype;
+    return new F();
+  },
+
+  createMappingObject : function(target, from) {
+    var min = typeof target.min === 'function' ? target.min() : target.min,
+        max = typeof target.max === 'function' ? target.max() : target.max,
+        _min = typeof from.min === 'function' ? from.min() : from.min,
+        _max = typeof from.max === 'function' ? from.max() : from.max
+    
+    // console.log( "MAPPING", from, target )
+    if( typeof from.object === 'undefined' && from.Value) { // if using an interface object directly to map
+      from = from.Value
+    }
+    
+    if( typeof target.object[ target.Name ].mapping !== 'undefined') {
+      target.object[ target.Name ].mapping.replace( from.object, from.name, from.Name )
+      return
+    }
+    
+    if( typeof from.targets !== 'undefined' ) {
+      if( from.targets.indexOf( target ) === -1 ) from.targets.push( [target, target.Name] )
+    }
+    
+    var fromTimescale = from.Name !== 'Out' ? from.timescale : 'audioOut' // check for audio Out, which is a faux property
+    
+    //console.log( target.timescale, fromTimescale )
+    
+    mapping = Gibber.mappings[ target.timescale ][ fromTimescale ]( target, from )
+    
+    //target.object[ target.name ].toString = function() { return '> continuous mapping: ' + from.name + ' -> ' + target.name }
+    
+    Object.defineProperties( target.object[ target.Name ], {
+      'min' : {
+        configurable:true,
+        get : function() { return min },
+        set : function(v) { min = v;  target.object[ target.Name ].mapping.outputMin = min }
+      },
+      'max' : {
+        configurable:true,
+        get : function() { return max },
+        set : function(v) { max = v; target.object[ target.Name ].mapping.outputMax = max }
+      },
+    })
+    
+    target.object[ target.Name ].mappingObjects = []
+    
+    Gibber.createProxyProperty( target.object[ target.Name ], 'min', 1, 0, {
+      'min':min, 'max':max, output: target.output,
+      timescale: target.timescale,
+      dimensions:1
+    })
+    
+    Gibber.createProxyProperty( target.object[ target.Name ], 'max', 1, 0, {
+      'min':min, 'max':max, output: target.output,
+      timescale: target.timescale,
+      dimensions:1
+    })
+    
+    Object.defineProperties( from.object[ from.Name ], {
+      'min' : {
+        configurable:true,
+        get : function() { return _min },
+        set : function(v) { _min = v; target.object[ target.Name ].mapping.inputMin = _min }
+      },
+      'max' : {
+        configurable:true,
+        get : function() { return _max },
+        set : function(v) { _max = v; target.object[ target.Name ].mapping.inputMax = _max }
+      },
+    })
+    
+    target.object[ target.Name ].invert = function() {
+      target.object[ target.Name ].mapping.invert()
+    }
+    
+    if( typeof target.object.mappings === 'undefined' ) target.object.mappings = []
+    
+    target.object.mappings.push( mapping )
+    
+    if( typeof from.object.mappings === 'undefined' ) from.object.mappings = []
+    
+    from.object.mappings.push( mapping )
+    
+    Gibber.defineSequencedProperty( target.object[ target.Name ], 'invert' )
+    
+    return mapping
+  },
+  
+  defineSequencedProperty : function( obj, key, priority ) {
+    var fnc = obj[ key ], seq, seqNumber
+    
+    // for( var i = obj.seq.seqs.length - 1; i >= 0; i-- ) {
+    //   var s = obj.seq.seqs[ i ]
+    //   if( s.key === key ) {
+    //     seq = s,
+    //     seqNumber = i
+    //     break;
+    //   }
+    // }
+    
+    if( !obj.seq && Gibber.Audio ) {
+      obj.seq = Gibber.Audio.Seqs.Seq({ doNotStart:true, scale:obj.scale, priority:priority, target:obj })
+    }
+    
+    fnc.seq = function( v,d ) {  
+
+      var args = {
+            'key': key,
+            values: $.isArray(v) || v !== null && typeof v !== 'function' && typeof v.length === 'number' ? v : [v],
+            durations: $.isArray(d) ? d : typeof d !== 'undefined' ? [d] : null,
+            target: obj,
+            'priority': priority
+          }
+            
+      if( typeof seq !== 'undefined' ) {
+        seq.shouldStop = true
+        obj.seq.seqs.splice( seqNumber, 1 )
+      }
+      
+      obj.seq.add( args )
+      
+      seqNumber = obj.seq.seqs.length - 1
+      seq = obj.seq.seqs[ seqNumber ]
+      
+      if( args.durations === null ) { obj.seq.autofire.push( seq ) }
+      
+      Object.defineProperties( fnc.seq, {
+        values: {
+          configurable:true,
+          get: function() { return obj.seq.seqs[ seqNumber ].values },
+          set: function(v) {
+            if( !Array.isArray(v) ) {
+              v = [ v ]
+            }
+            if( key === 'note' && obj.seq.scale ) {  
+              v = makeNoteFunction( v, obj.seq )
+            }
+            obj.seq.seqs[ seqNumber ].values = v //.splice( 0, 10000, v )
+            //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].values, 'reverse' )
+          }
+        },
+        durations: {
+          configurable:true,
+          get: function() { return obj.seq.seqs[ seqNumber ].durations },
+          set: function(v) {
+            if( !Array.isArray(v) ) {
+              v = [ v ]
+            }
+            obj.seq.seqs[ seqNumber ].durations = v   //.splice( 0, 10000, v )
+            //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].durations, 'reverse' )  
+          }
+        },
+      })
+      
+      //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].values, 'reverse' )
+      //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].durations, 'reverse' )      
+      
+      if( !obj.seq.isRunning ) {
+        obj.seq.offset = Gibber.Clock.time( obj.offset )
+        obj.seq.start( true, priority )
+      }
+      return obj
+    }
+    
+    fnc.seq.stop = function() { seq.shouldStop = true } 
+    
+    // TODO: property specific stop/start/shuffle etc. for polyseq
+    fnc.seq.start = function() {
+      seq.shouldStop = false
+      obj.seq.timeline[0] = [ seq ]                
+      obj.seq.nextTime = 0
+      
+      if( !obj.seq.isRunning ) { 
+        obj.seq.start( false, priority )
+      }
+    }
+  },
+  
+  defineRampedProperty : function( obj, _key ) {
+    var fnc = obj[ _key ], key = _key.slice(1), cancel
+    
+    fnc.ramp = function( from, to, length ) {
+      if( arguments.length < 2 ) {
+        console.err( 'ramp requires at least two arguments: target and time.' )
+        return
+      }
+      
+      if( typeof length === 'undefined' ) { // if only to and length arguments
+        length = to
+        to = from
+        from = obj[ key ]()
+      }
+      
+      if( cancel ) cancel()
+      
+      if( typeof from !== 'object' ) {
+        obj[ key ] = Line( from, to, length )
+      }else{
+        from.retrigger( to, Gibber.Clock.time( length ) )
+      }
+      
+      cancel = future( function() {
+        obj[ key ] = to
+      }, length )
+      
+      return obj
+    }
+  },
+  
+  createProxyMethods : function( obj, methods ) {
+    for( var i = 0; i < methods.length; i++ ) Gibber.defineSequencedProperty( obj, methods[ i ] ) 
+  },
+  
+  defineProperty : function( obj, propertyName, shouldSeq, shouldRamp, mappingsDictionary, shouldUseMappings, priority, useOldGetter ) {
+    var originalValue = typeof obj[ propertyName ] === 'object' ? obj[ propertyName ].valueOf() : obj[ propertyName ],
+        Name = propertyName.charAt( 0 ).toUpperCase() + propertyName.slice( 1 ),
+        property = function( v ) {
+          var returnValue = property
+          
+          if( v ) { 
+            obj[ propertyName ] = v
+            returnValue = obj
+          }
+          
+          return returnValue
+        }
+
+    // TODO: get rid of this line
+    mappingsDictionary = shouldUseMappings ? mappingsDictionary || obj.mappingProperties[ propertyName ] : null
+    
+    $.extend( property, mappingsDictionary )
+    
+    $.extend( property, {
+      'propertyName': propertyName, // can't redfine 'name' on a function, unless we eval or something...
+      'Name':   Name,  
+      value:    originalValue,
+      type:     'property',
+      object:   obj,
+      targets:  [],
+      valueOf:  function() { return property.value },
+      toString: function() { return property.value.toString() },
+      oldSetter: obj.__lookupSetter__( propertyName ),
+      oldGetter: obj.__lookupGetter__( propertyName ),      
+      oldMappingObjectGetter: obj.__lookupGetter__( Name ),
+      oldMappingObjectSetter: obj.__lookupSetter__( Name )
+    })
+    
+    Object.defineProperty( obj, propertyName, {
+      configurable:true,
+      get: function(){ 
+        // var returnValue = property
+        // if( useOldGetter ) {
+        //   console.log( property.oldGetter )
+        //   returnValue = property.oldGetter()
+        // }
+        // else if( property.oldMappingObjectGetter ) {
+        //   return property.oldMappingObjectGetter()
+        // }
+        // return returnValue || property
+        return property
+      },
+      set: function( v ){
+        if( (typeof v === 'function' || typeof v === 'object' && v.type === 'mapping') && ( v.type === 'property' || v.type === 'mapping' ) ) {
+          //console.log( "CREATING MAPPING", property )
+          Gibber.createMappingObject( property, v )
+        }else{
+          if( shouldUseMappings && obj[ property.Name ] ) {
+            if( typeof obj[ property.Name ].mapping !== 'undefined' ) { 
+              if( obj[ property.Name ].mapping.remove ) obj[ property.Name ].mapping.remove( true )
+            }
+          }
+          
+          var newValue = v
+        
+          if( property.oldSetter ) {
+            var setterResult = property.oldSetter.call( obj, v )
+            if( typeof setterResult !== 'undefined' ) { newValue = setterResult }
+          }
+          
+          property.value = newValue
+        }
+        
+        return obj
+      }
+    })
+    
+    if( shouldSeq  ) Gibber.defineSequencedProperty( obj, propertyName, priority )
+    if( shouldRamp ) Gibber.defineRampedProperty( obj, propertyName )
+    
+    // capital letter mapping sugar
+    if( shouldUseMappings ) {
+      Object.defineProperty( obj, property.Name, {
+        configurable: true,
+        get : function()  {
+          if( typeof property.oldMappingObjectGetter === 'function' ) property.oldMappingObjectGetter()
+          return property
+        },
+        set : function( v ) {
+          obj[ property.Name ] = v
+          if( typeof mapping.oldMappingObjectSetter === 'function' ) mapping.oldMappingObjectSetter( v )
+        }
+      })
+    }
+  },
+  
+  createProxyProperty: function( obj, _key, shouldSeq, shouldRamp, dict, _useMappings, priority ) {
+    _useMappings = _useMappings === false ? false : true
+    
+    Gibber.defineProperty( obj, _key, shouldSeq, shouldRamp, dict, _useMappings, priority )
+  },
+  
+  // obj, _key, shouldSeq, shouldRamp, dict, _useMappings, priority
+  createProxyProperties : function( obj, mappingProperties, noSeq, noRamp ) {
+    var shouldSeq = typeof noSeq === 'undefined' ? true : noSeq,
+        shouldRamp = typeof noRamp === 'undefined' ? true : noRamp
+    
+    obj.gibber = true // keyword identifying gibber object, needed for notation parser    
+    
+    obj.mappingProperties = mappingProperties
+    obj.mappingObjects = []
+    
+    for( var key in mappingProperties ) {
+      if( ! mappingProperties[ key ].doNotProxy ) {
+        Gibber.createProxyProperty( obj, key, shouldSeq, shouldRamp, mappingProperties[ key ] )
+      }
+    }
+  },  
+}
+
+Gibber.Utilities = _dereq_( './utilities' )( Gibber )
+// Gibber.Audio     = require( 'gibber.audio.lib/scripts/gibber/audio' )( Gibber )
+// Gibber.Graphics  = require( 'gibber.graphics.lib/scripts/gibber/graphics/graphics' )( Gibber )
+// Gibber.Interface = require( 'gibber.interface.lib/scripts/gibber/interface/interface' )( Gibber )
+Gibber.mappings  = _dereq_( './mappings' )( Gibber )
+
+module.exports = Gibber
+
+})()
+},{"./dollar":1,"./mappings":3,"./utilities":4}],3:[function(_dereq_,module,exports){
+module.exports = function( Gibber ) {  
+  var mappings = {
+    audio : {
+      graphics: function( target, from ) {
+				if( typeof from.object.track === 'undefined' ) from.object.track = {}
+				
+        var proxy = typeof from.object.track[ from.propertyName ] !== 'undefined' ? from.object.track[ from.propertyName ] : new Gibber.Audio.Core.Proxy2( from.object, from.propertyName ),
+            op    = new Gibber.Audio.Core.OnePole({ a0:.005, b1:.995 }),
+            mapping
+        
+        from.object.track = proxy;
+
+        mapping = target.object[ target.Name ].mapping = Gibber.Audio.Core.Binops.Map( proxy, target.min, target.max, from.min, from.max, target.output, from.wrap ) 
+        
+        op.input = mapping
+        
+        target.object[ target.propertyName ] = op
+        
+        mapping.proxy = proxy
+        mapping.op = op
+        
+        mapping.remove = function( doNotSet ) {
+          if( !doNotSet ) {
+            target.object[ target.propertyName ] = target.object[ target.Name ].mapping.getValue()
+          }
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        return mapping
+      },
+      interface: function( target, from ) {
+        // TODO: why does the proxy track from.name instead of from.propertyName? maybe because interface elements don't get passed to mapping init?
+        var proxy = typeof from.track !== 'undefined' ? from.track : new Gibber.Audio.Core.Proxy2( from.object, from.name ),
+            op    = new Gibber.Audio.Core.OnePole({ a0:.005, b1:.995 }),
+            range = target.max - target.min,
+            percent = ( target.object[ target.propertyName ] - target.min ) / range,
+            widgetValue = from.min + ( ( from.max - from.min ) * percent ),
+            mapping
+                
+        if( from.object.setValue ) from.object.setValue( widgetValue )
+        
+        from.track = proxy
+        
+        mapping = target.object[ target.Name ].mapping = Gibber.Audio.Core.Binops.Map( proxy, target.min, target.max, from.min, from.max, target.output, from.wrap ) 
+        
+        op.input = mapping
+        target.object[ target.propertyName ] = op
+        
+        mapping.proxy = proxy
+        mapping.op = op
+
+        mapping.remove = function( doNotSet ) {
+          if( !doNotSet ) target.object[ target.propertyName ] = mapping.getValue()
+          
+          //if( mapping.op ) mapping.op.remove()
+          
+          delete mapping
+        }
+        
+        if( typeof from.object.label !== 'undefined' ) { 
+          var labelString = ''
+          for( var i = 0; i < from.targets.length; i++ ) {
+            var __target = from.targets[ i ]
+            labelString += __target[0].object.name + '.' + __target[1]
+            if( i !== from.targets.length - 1 ) labelString += ' & '
+          }
+          from.object.label = labelString
+        }
+                
+        mapping.replace = function( replacementObject, key, Key  ) {
+          proxy.setInput( replacementObject )
+          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )
+        }
+        
+        return mapping
+      },
+      audio: function( target, from ) {
+        var proxy, mapping
+        
+        if( typeof from.object.track !== 'undefined' ) {
+          proxy = from.object.track
+          proxy.count++
+        } else {
+          proxy = new Gibber.Audio.Core.Proxy2( from.object, from.propertyName )
+          proxy.count = 1
+        }
+        from.object.track = proxy
+        
+        target.object[ target.propertyName ] = Gibber.Audio.Core.Binops.Map( proxy, target.min, target.max, from.min, from.max )
+        
+        mapping = target.object[ target.Name ].mapping = target.object[ target.propertyName ] // must call getter function explicitly
+        
+        mapping.remove = function( doNotSet ) {
+          if( !doNotSet ) {
+            target.object[ target.propertyName ] = mapping.getValue()
+          }
+          
+          if( mapping.op ) mapping.op.remove()
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        mapping.replace = function( replacementObject, key, Key ) {
+          var proxy = new Gibber.Audio.Core.Proxy2( replacementObject, key )
+          mapping.input = proxy
+          if( replacementObject[ Key ].targets && replacementObject[ Key ].targets.indexOf( target ) === -1 ) {
+            replacementObject[ Key ].targets.push( [target, target.Name] )
+          }
+        }
+        
+        return mapping
+      },
+      audioOut : function( target, from ) {
+        var mapping
+        
+        mapping = Gibber.Audio.Core.Binops.Map( null, target.min, target.max, 0, 1, 0 )
+        
+        target.object[ target.propertyName ] = target.object[ target.Name ].mapping = mapping
+        
+        if( typeof from.object.track !== 'undefined' ) {
+          mapping.follow = from.object.track
+          mapping.follow.count++
+        } else {
+          mapping.follow = new Gibber.Audio.Analysis.Follow({ input:from.object, useAbsoluteValue: true })
+          mapping.follow.count = 1
+        }
+        
+        from.object.track = mapping.input = mapping.follow
+        
+        mapping.remove = function( doNotSet ) {
+          if( !doNotSet ) {
+            target.object[ target.propertyName ] = target.object[ target.Name ].mapping.getValue()
+          }
+          
+          if( mapping.bus )
+            mapping.bus.disconnect()
+          
+          if( mapping.follow ) {
+            mapping.follow.count--
+            if( mapping.follow.count === 0) {
+              delete from.object.track
+              mapping.follow.remove()
+            }
+          }
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        mapping.replace = function( replacementObject, key, Key  ) {
+          mapping.follow.input = replacementObject   
+          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )            
+        }
+      
+        var env = mapping.follow.bufferSize
+        Object.defineProperty( target.object[ target.Name ], 'env', {
+          configurable:true,
+          get: function() { return env },
+          set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
+        })
+                
+        return mapping
+      }
+    },
+    graphics: {
+      graphics: function( target, from ) {
+        // rewrite getValue function of Map object to call Map callback and then return appropriate value
+        var map = Gibber.Audio.Core.Binops.Map( from.object[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
+            old = map.getValue.bind( map ),
+            mapping
+        
+        map.getValue = function() {
+          //console.log( from.propertyName, from, target.min, target.max, from.min, from.max )
+          map.callback( from.object[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap )
+          return old()
+        }
+        
+        mapping = target.object[ target.Name ].mapping = map
+        
+        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
+          target.object.mod( target.propertyName, mapping, '=' )
+        }else{
+          target.modObject.mod( target.modName, mapping, '=' )
+        }
+        
+        mapping.remove = function() {
+          if( target.object.mod ) {
+            target.object.removeMod( target.propertyName )
+          }else{
+            target.modObject.removeMod( target.modName )
+          }
+          target.object[ target.propertyName ] = target.object[ target.Name ].mapping.getValue()
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        mapping.replace = function( replacementObject, key, Key  ) { mapping.input = replacementObject }
+        
+        return mapping
+      },
+      interface: function( target, from ) {
+        // console.log( "FROM", from.propertyName, target.min, target.max, from.min, from.max )
+        var _map = Gibber.Audio.Core.Binops.Map( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
+            mapping
+            
+        if( typeof from.object.functions === 'undefined' ) {
+          from.object.functions = {}
+          from.object.onvaluechange = function() {
+            for( var key in from.object.functions ) {
+              from.object.functions[ key ]()
+            }
+          }
+        }
+
+        mapping = target.object[ target.Name ].mapping = _map
+
+        target.mapping.from = from
+        
+        var fcn_name = target.propertyName + ' <- ' + from.object.propertyName + '.' + from.Name
+
+        from.object.functions[ fcn_name ] = function() {
+          var val = mapping.callback( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
+          // target.object[ target.Name ].value = val
+          // console.log( target.Name )
+          target.object[ target.Name ].oldSetter.call( target.object[ target.Name ], val )
+        }
+        // from.object.onvaluechange = function() {          
+        //   var val = map.callback( this[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap )
+        //   target.object[ target.propertyName ] = val
+        // }
+        mapping.replace = function() {
+          // var old = from.functions[ target.Name ]
+        } 
+        
+        mapping.remove  = function() {
+          console.log( "mapping removed" )
+          delete from.object.functions[ fcn_name ]
+        } 
+        
+        if( from.object.setValue ) 
+          from.object.setValue( target.object[ target.propertyName ] )
+        
+        // if( typeof from.object.label !== 'undefined' ) {
+        //   from.object.label = target.object.propertyName + '.' + target.Name
+        // }
+        if( typeof from.object.label !== 'undefined' ) { 
+          var labelString = ''
+          for( var i = 0; i < from.targets.length; i++ ) {
+            var __target = from.targets[ i ]
+            labelString += __target[0].object.propertyName + '.' + __target[1]
+            if( i !== from.targets.length - 1 ) labelString += ' & '
+          }
+          from.object.label = labelString
+        }
+        
+        return mapping
+      },
+      audio: function( target, from ) {
+        var mapping
+        
+        mapping = target.object[ target.Name ].mapping = Gibber.Audio.Core.Binops.Map( null, target.min, target.max, from.min, from.max, target.output, from.wrap )
+      
+        mapping.follow = typeof from.object.track !== 'undefined' ? from.object.track : new Gibber.Audio.Core.Follow({ input:from.object[ from.propertyName ], useAbsoluteValue: false })
+        
+        from.object.track = target.object[ target.Name ].mapping.follow
+        // assign input after Map ugen is created so that follow can be assigned to the mapping object
+        mapping.input = mapping.follow
+      
+        mapping.bus = new Gibber.Audio.Core.Bus2({ amp:0 }).connect()
+
+        mapping.connect( mapping.bus )
+        
+        mapping.replace = function( replacementObject, key, Key ) {
+          mapping.follow.input = replacementObject            
+          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )
+        }
+        
+        var env = mapping.follow.bufferSize
+        Object.defineProperty( target.object[ target.Name ], 'env', {
+          get: function() { return env },
+          set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
+        })
+        
+        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
+          //console.log( target.object, target.object.mod )
+          target.object.mod( target.propertyName, mapping, '=' )
+        }else{
+          target.modObject.mod( target.modName, mapping, '=' )
+        }
+        
+        mapping.remove = function() {
+          this.bus.disconnect()
+          
+          if( this.follow ) {
+            this.follow.count--
+            if( this.follow.count === 0) {
+              delete from.object.track
+              this.follow.remove()
+            }
+          }
+
+          if( target.object.mod ) {
+            target.object.removeMod( target.propertyName )
+          }else{
+            target.modObject.removeMod( target.modName )
+          }
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        return mapping
+      },
+      audioOut : function( target, from ) {
+        if( typeof target.object[ target.Name ].mapping === 'undefined') {
+          var mapping = target.object[ target.Name ].mapping = Gibber.Audio.Core.Binops.Map( null, target.min, target.max, 0, 1, 0 )   
+          if( typeof from.object.track !== 'undefined' ) {
+            mapping.follow = from.object.track
+            mapping.follow.count++
+          } else {
+            mapping.follow = new Gibber.Audio.Core.Follow({ input:from.object })
+            mapping.follow.count = 1
+          }
+          from.object.track = mapping.follow
+          
+          var env = mapping.follow.bufferSize
+          Object.defineProperty( target.object[ target.Name ], 'env', {
+            configurable: true,
+            get: function() { return env },
+            set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
+          })
+          
+          mapping.input = mapping.follow
+          mapping.bus = new Gibber.Audio.Core.Bus2({ amp:0 }).connect()
+          mapping.connect( mapping.bus )
+        
+          mapping.replace = function( replacementObject, key, Key  ) {
+            // _console.log( key, replacementObject )
+            
+            // what if new mapping isn't audio type?
+            if ( replacementObject[ Key ].timescale === from.timescale ) {
+              var idx = mapping.follow.input[ from.Name ].targets.indexOf( target )
+              if( idx >= -1 ) {
+                mapping.follow.input[ from.Name ].targets.splice( idx, 1 )
+              }
+            
+              mapping.follow.input = replacementObject   
+              if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )            
+            }else{
+              mapping.bus.disconnect()
+              mapping.follow.remove()
+              Gibber.createMappingObject( target, replacementObject )
+            }
+            
+          }
+        }else{
+          console.log("REPLACING MAPPING")
+          mapping.replace( from.object, from.propertyName, from.Name )
+          return mapping
+        }
+        
+        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties of vectors
+          //console.log( target.object, target.object.mod )
+          target.object.mod( target.propertyName, mapping, '=' )
+        }else if (target.modObject) {
+          target.modObject.mod( target.modName, mapping, '=' )
+        }else{
+          !function() {
+            var _mapping = mapping
+            target.object.update = function() { 
+              target.object[ target.propertyName ]( _mapping.getValue() )
+            }
+          }()
+          //target.object.mod( target.propertyName, mapping, '=' ) 
+        }
+        
+        //target.object[ target.Name ].mapping = mapping
+        
+        mapping.remove = function() {
+          this.bus.disconnect()
+          
+          if( this.follow ) {
+            this.follow.count--
+            if( this.follow.count === 0) {
+              delete from.object.track
+              this.follow.remove()
+            }
+          }
+
+          if( target.object.mod ) {
+            target.object.removeMod( target.propertyName )
+          }else if( target.modObject ) {
+            target.modObject.removeMod( target.modName )
+          }else{
+            console.log( 'removing update ')
+            //target.object.update = function() {}
+          }
+          
+          target.object.mappings.splice( target.object.mappings.indexOf( mapping ), 1 )
+          from.object.mappings.splice( from.object.mappings.indexOf( mapping ), 1 ) 
+          
+          var targets = target.object[ target.Name ].targets,
+              idx = targets.indexOf( mappings )
+          
+          if( idx !== -1 ) {
+            targets.splice( idx, 1 )
+          }
+          
+          delete target.object[ target.Name ].mapping
+        }
+        return mapping
+      }
+    },
+    notation: {
+      graphics: function( target, from ) {
+        // rewrite getValue function of Map object to call Map callback and then return appropriate value
+
+        var map = Gibber.Audio.Core.Binops.Map( from.object[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
+            old = map.getValue.bind( map ),
+            mapping
+        
+        map.getValue = function() {
+          map.callback( from.object[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap )
+          return old()
+        }
+        
+        mapping = target.object[ target.Name ].mapping = map
+        
+        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
+          target.object.mod( target.propertyName, mapping, '=' )
+        }else{
+          target.modObject.mod( target.modName, mapping, '=' )
+        }
+        
+        mapping.remove = function() {
+          if( target.object.mod ) {
+            target.object.removeMod( target.propertyName )
+          }else{
+            target.modObject.removeMod( target.modName )
+          }
+          target.object[ target.propertyName ] = target.object[ target.Name ].mapping.getValue()
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        mapping.replace = function( replacementObject, key, Key  ) { mapping.input = replacementObject }
+        
+        return mapping
+      },
+      interface: function( target, from ) {
+        // console.log( "FROM", from.propertyName, target.min, target.max, from.min, from.max )
+        var _map = Gibber.Audio.Core.Binops.Map( from.object[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
+            mapping
+            
+        if( typeof from.object.functions === 'undefined' ) {
+          from.object.functions = {}
+          from.object.onvaluechange = function() {
+            for( var key in from.object.functions ) {
+              from.object.functions[ key ]()
+            }
+          }
+        }
+
+        mapping = target.object[ target.Name ].mapping = _map
+
+        target.mapping.from = from
+        
+        var fcn_name = target.propertyName + ' <- ' + from.object.propertyName + '.' + from.Name
+
+        from.object.functions[ fcn_name ] = function() {
+          var val = mapping.callback( from.object[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap )
+          // target.object[ target.Name ].value = val
+          // console.log( target.Name )
+          target.object[ target.Name ].oldSetter.call( target.object[ target.Name ], val )
+        }
+        // from.object.onvaluechange = function() {          
+        //   var val = map.callback( this[ from.propertyName ], target.min, target.max, from.min, from.max, target.output, from.wrap )
+        //   target.object[ target.propertyName ] = val
+        // }
+        mapping.replace = function() {
+          // var old = from.functions[ target.Name ]
+        } 
+        
+        mapping.remove  = function() {
+          console.log( "mapping removed" )
+          delete from.object.functions[ fcn_name ]
+        } 
+        
+        if( from.object.setValue ) 
+          from.object.setValue( target.object[ target.propertyName ] )
+        
+        // if( typeof from.object.label !== 'undefined' ) {
+        //   from.object.label = target.object.propertyName + '.' + target.Name
+        // }
+        if( typeof from.object.label !== 'undefined' ) { 
+          var labelString = ''
+          for( var i = 0; i < from.targets.length; i++ ) {
+            var __target = from.targets[ i ]
+            labelString += __target[0].object.propertyName + '.' + __target[1]
+            if( i !== from.targets.length - 1 ) labelString += ' & '
+          }
+          from.object.label = labelString
+        }
+        
+        return mapping
+      },
+      audio: function( target, from ) {
+        var mapping
+        
+        mapping = target.object[ target.Name ].mapping = Gibber.Audio.Core.Binops.Map( null, target.min, target.max, from.min, from.max, target.output, from.wrap )
+  
+        if( typeof from.object.track !== 'undefined' && from.object.track.input === from.object.properties[ from.propertyName ] ) {
+          mapping.follow = from.object.track
+          mapping.follow.count++
+        }else{
+          mapping.follow = new Gibber.Audio.Core.Follow({ input:from.object.properties[ from.propertyName ], useAbsoluteValue: false })
+          mapping.follow.count = 1
+        }
+        
+        from.object.track = target.object[ target.Name ].mapping.follow
+        
+        // assign input after Map ugen is created so that follow can be assigned to the mapping object
+        mapping.input = mapping.follow
+      
+        mapping.bus = new Gibber.Audio.Core.Bus2({ amp:0 }).connect()
+
+        mapping.connect( mapping.bus )
+        
+        mapping.replace = function( replacementObject, key, Key ) {
+          mapping.follow.input = replacementObject            
+          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )
+        }
+        
+        var env = mapping.follow.bufferSize
+        Object.defineProperty( target.object[ target.Name ], 'env', {
+          get: function() { return env },
+          set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
+        })
+        
+        mapping.update = function() {   
+          target.object[ target.propertyName ]( mapping.getValue() )
+        }
+        mapping.text = target.object
+
+        // let Notation object handle scheduling updates
+        Gibber.Environment.Notation.add( mapping )
+        
+        mapping.remove = function() {
+          this.bus.disconnect()
+          
+          if( this.follow ) {
+            this.follow.count--
+            if( this.follow.count === 0) {
+              delete from.object.track
+              this.follow.remove()
+            }
+          }
+          
+          Gibber.Environment.Notation.remove( mapping )
+          
+          delete target.object[ target.Name ].mapping
+        }
+        
+        return mapping
+      },
+      audioOut : function( target, from ) {
+        if( typeof target.object[ target.Name ].mapping === 'undefined') {
+          var mapping = target.object[ target.Name ].mapping = Gibber.Audio.Core.Binops.Map( null, target.min, target.max, 0, 1, 0 )
+          
+          console.log( "MAPPING", from )
+          
+          if( typeof from.object.track !== 'undefined' && from.object.track.input === from.object.properties[ from.propertyName ] ) {
+            mapping.follow = from.object.track
+            mapping.follow.count++
+          }else{
+            mapping.follow = new Gibber.Audio.Core.Follow({ input:from.object, useAbsoluteValue: true })
+            mapping.follow.count = 1
+          }
+          
+          from.object.track = mapping.follow
+          
+          var env = mapping.follow.bufferSize
+          Object.defineProperty( target.object[ target.Name ], 'env', {
+            configurable:true,
+            get: function() { return env },
+            set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
+          })
+          
+          mapping.input = mapping.follow
+          mapping.bus = new Gibber.Audio.Core.Bus2({ amp:0 }).connect()
+          mapping.connect( mapping.bus )
+        
+          mapping.replace = function( replacementObject, key, Key  ) {
+            // _console.log( key, replacementObject )
+            
+            // what if new mapping isn't audio type?
+            if ( replacementObject[ Key ].timescale === from.timescale ) {
+              var idx = mapping.follow.input[ from.Name ].targets.indexOf( target )
+              if( idx >= -1 ) {
+                mapping.follow.input[ from.Name ].targets.splice( idx, 1 )
+              }
+            
+              mapping.follow.input = replacementObject   
+              if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )            
+            }else{
+              mapping.bus.disconnect()
+              mapping.follow.remove()
+              Gibber.createMappingObject( target, replacementObject )
+            }
+            
+          }
+        }else{
+          mapping.replace( from.object, from.propertyName, from.Name )
+          return mapping
+        }
+        
+        mapping.update = function() {   
+          target.object[ target.propertyName ]( mapping.getValue() )
+        }
+        mapping.text = target.object
+
+        // let Notation object handle scheduling updates
+        Gibber.Environment.Notation.add( mapping )
+        
+        mapping.remove = function() {
+          this.bus.disconnect()
+          
+          if( this.follow ) {
+            this.follow.count--
+            if( this.follow.count === 0) {
+              delete from.object.track
+              this.follow.remove()
+            }
+          }
+          
+          Gibber.Environment.Notation.remove( mapping )
+          
+          delete target.object[ target.Name ].mapping
+        }
+        return mapping
+      }
+    },
+  } 
+  
+  return mappings
+}
+
+module.exports.outputCurves= {
+  LINEAR:0,
+  LOGARITHMIC:1
+}
+},{}],4:[function(_dereq_,module,exports){
+module.exports = function( Gibber ) {
+
+"use strict"
+
+var soloGroup = [],
+    isSoloing = false,
+    $ = Gibber.dollar,
+    Synths = { Presets: {} },
+    Gibberish = Gibber.Audio ? Gibber.Audio.Core : null ,//require( 'gibberish-dsp' ),
+    Clock = Gibber.Clock,
+    rnd = Math.random,
+
+    Utilities = {
+      seq : function() {
+        var arg = arguments[0],
+            type = typeof arg,
+            list = [],
+            output = null
+    
+        if( type === 'object' ) {
+          if( Array.isArray( arg ) ) type = 'array'
+        }
+    
+        // switch( type ) {
+        //   case 'function':
+        //     output = arg
+        //     break;
+        //   case 'array':
+        //     for( var i = 0; i < arg.length; i++ ) {
+        //       var elem = arg[ i ]
+        //       if( typeof )
+        //     }
+        //     break;
+        //   default: 
+        //     output = function() { return arg }
+        //     break;
+        // }
+    
+        return output
+      },
+      random :  function() {
+        var dict = {},
+            lastChosen = null;
+    
+        for(var i = 0; i < arguments.length; i+=2) {
+          dict[ "" + arguments[i] ] = { repeat: arguments[i+1], count: 0 };
+        }
+
+        this.pick = function() {
+          var value = 0, index, lastValue;
+          if(this[lastChosen]) lastValue = this[lastChosen]
+
+          if(lastChosen !== null && dict[ lastValue ].count++ <= dict[ lastValue ].repeat) {
+            index = lastChosen;
+            if( dict[ lastValue ].count >= dict[ lastValue ].repeat) {
+              dict[ lastValue ].count = 0;
+              lastChosen = null;
+            };
+          }else{
+            index = Utilities.rndi(0, this.length - 1);
+            value = this[index];
+            if( typeof dict[ ""+value ] !== 'undefined' ) {
+              dict[ ""+value ].count = 1;
+              lastChosen = index;
+            }else{
+              lastChosen = null;
+            }
+          }
+      
+        	return index; // return index, not value as required by secondary notation stuff
+        };
+    
+        return this;
+      },
+  
+      random2 : function() {
+        var dict = {},
+            lastChosen = null,
+            that = this;
+    
+        for(var i = 0; i < arguments.length; i+=2) {
+          dict[ "" + arguments[i] ] = { repeat: arguments[i+1], count: 0 };
+        }
+
+        this.pick = function() {
+          var value = 0, index, lastValue;
+          if(that[lastChosen]) lastValue = that[lastChosen]
+
+          if(lastChosen !== null && dict[ lastValue ].count++ <= dict[ lastValue ].repeat) {
+            index = lastChosen;
+            if( dict[ lastValue ].count >= dict[ lastValue ].repeat) {
+              dict[ lastValue ].count = 0;
+              lastChosen = null;
+            };
+          }else{
+            index = Utilities.rndi(0, that.length - 1);
+            value = that[index];
+            if( typeof dict[ ""+value ] !== 'undefined' ) {
+              dict[ ""+value ].count = 1;
+              lastChosen = index;
+            }else{
+              lastChosen = null;
+            }
+          }
+      
+        	return that[ index ]; // return index, not value as required by secondary notation stuff
+        }
+    
+        return this.pick
+      },
+  
+      choose: function( length ) {
+        var output = null
+    
+        if( isNaN( length ) ) length = 1
+    
+        if( length !== 1 ) {
+          var arr = []
+    
+          for( var i = 0; i < length; i++ ) {
+            arr[ i ] = this[ Utilities.rndi( 0, this.length - 1 ) ]
+          }
+      
+          output = arr
+        }else{
+          output = this[ Utilities.rndi( 0, this.length - 1 ) ]
+        }
+    
+      	return output;
+      },
+
+      future : function(func, time) { 
+        var count = 0
+        
+        var __seq = Gibber.Audio.Seqs.Seq(
+          function() {
+            if( count === 1 ) {
+              func()
+              __seq.stop()
+              __seq.disconnect()
+            }
+            count++
+          }, 
+          Gibber.Audio.Clock.time( time ) 
+        )
+    
+        return function(){ __seq.stop(); __seq.disconnect(); }
+      },
+  
+      shuffle : function( arr ) {
+      	for(var j, x, i = arr.length; i; j = parseInt(Math.random() * i), x = arr[--i], arr[i] = arr[j], arr[j] = x);
+      },
+  
+      solo : function( ugen ) {
+        var args = Array.prototype.slice.call( arguments, 0 );
+        if( ugen ) {
+          if( isSoloing ) { Utilities.solo(); } // quick toggle on / off
+      
+          for( var j = 0; j < args.length; j++ ) { // check if user soloed ugen, but fx is actually feeding Master bus
+            var arg = args[ j ]
+            if( arg.fx.length > 0 ) { 
+              args[j] = arg.fx[ arg.fx.length - 1 ] // get last fx in chain
+            }
+          }
+      
+          for(var i = 0; i < Master.inputs.length; i++) {
+            //console.log( i, Master.inputs[i] )
+            var idx = args.indexOf( Master.inputs[i].value ),
+                _ugen = Master.inputs[i].value,
+                name = _ugen.name
+            
+            if( idx === -1 ) {
+              if( name !== 'polyseq' &&  name !== 'Seq' ) { // TODO: please, please, don't route seqs into master bus...
+                Master.inputs[i]._amp = Master.inputs[i].amp
+                Master.inputs[i].amp = 0//value = Mul( Master.inputs[i].value, 0 )
+                soloGroup.push( Master.inputs[i] );
+              }
+            }
+          }
+          isSoloing = true;
+        }else{
+          for( var i = 0; i < soloGroup.length; i++ ) {
+            soloGroup[i].amp = soloGroup[i]._amp
+          }
+          soloGroup.length = 0
+          isSoloing = false;
+        } 
+      },
+      fill : function( length, fnc ) {
+        if( isNaN( length ) ) length = 16
+        if( typeof fnc !== 'function' ) { fnc = Rndf() }
+    
+        fnc = fnc.bind( this )
+    
+        for( var i = 0; i < length; i++ ) {
+          this[ i ] = fnc()
+        }
+    
+        return this
+      },
+      merge : function() {
+        var output = []
+      	for( var i = 0; i < this.length; i++ ) {
+          var arg = this[ i ]
+          if( Array.isArray( arg ) ) {
+            for( var j = 0; j < arg.length; j++ ) {
+      				output.push( arg[ j ] )
+            }
+          }else{
+            output.push( arg )
+          }
+        }
+  
+        return output
+      },
+      weight : function() {
+        var weights = Array.prototype.slice.call( arguments, 0 )
+        this.pick = function() {
+          var returnValue = this[0],
+              total = 0,
+              _rnd = Utilities.rndf();
+  
+          for(var i = 0; i < weights.length; i++) {
+            total += weights[i];
+            if( _rnd < total ) { 
+              returnValue = i;
+              break;
+            }
+          }
+          return returnValue;
+        }
+    
+      	return this
+      },
+      gibberArray: function( arr ) {
+        
+      },
+      rndf : function(min, max, number, canRepeat) {
+        canRepeat = typeof canRepeat === "undefined" ? true : canRepeat;
+      	if(typeof number === "undefined" && typeof min != "object") {
+      		if(arguments.length == 1) {
+      			max = arguments[0]; min = 0;
+      		}else if(arguments.length == 2) {
+      			min = arguments[0];
+      			max = arguments[1];
+      		}else{
+      			min = 0;
+      			max = 1;
+      		}
+
+      		var diff = max - min,
+      		    r = Math.random(),
+      		    rr = diff * r
+	
+      		return min + rr;
+      	}else{
+      		var output = [];
+      		var tmp = [];
+      		if(typeof number === "undefined") {
+      			number = max || min.length;
+      		}
+		
+      		for(var i = 0; i < number; i++) {
+      			var num;
+      			if(typeof arguments[0] === "object") {
+      				num = arguments[0][rndi(0, arguments[0].length - 1)];
+      			}else{
+      				if(canRepeat) {
+      					num = Utilities.rndf(min, max);
+      				}else{
+                num = Utilities.rndf(min, max);
+                while(tmp.indexOf(num) > -1) {
+                  num = Utilities.rndf(min, max);
+                }
+      					tmp.push(num);
+      				}
+      			}
+      			output.push(num);
+      		}
+      		return output;
+      	}
+      },
+  
+      Rndf : function() {
+        var _min, _max, quantity, random = Math.random, canRepeat;
+    
+        if(arguments.length === 0) {
+          _min = 0; _max = 1;
+        }else if(arguments.length === 1) {
+          _max = arguments[0]; _min = 0;
+        }else if(arguments.length === 2) {
+          _min = arguments[0]; _max = arguments[1];
+        }else if(arguments.length === 3) {
+          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2];
+        }else{
+          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2]; canRepeat = arguments[3];
+        }    
+  
+        return function() {
+          var value, min, max, range;
+    
+          min = typeof _min === 'function' ? _min() : _min
+          max = typeof _max === 'function' ? _max() : _max
+      
+          if( typeof quantity === 'undefined') {
+            value = Utilities.rndf( min, max )
+          }else{
+            value = Utilities.rndf( min, max, quantity, canRepeat )
+          }
+    
+          return value;
+        }
+      },
+
+      rndi : function( min, max, number, canRepeat ) {
+        var range;
+    
+        if(arguments.length === 0) {
+          min = 0; max = 1;
+        }else if(arguments.length === 1) {
+          max = arguments[0]; min = 0;
+        }else if( arguments.length === 2 ){
+          min = arguments[0]; max = arguments[1];
+        }else{
+          min = arguments[0]; max = arguments[1]; number = arguments[2]; canRepeat = arguments[3];
+        }    
+  
+        range = max - min
+        if( range < number ) canRepeat = true
+  
+        if( typeof number === 'undefined' ) {
+          range = max - min
+          return Math.round( min + Math.random() * range );
+        }else{
+      		var output = [];
+      		var tmp = [];
+		
+      		for(var i = 0; i < number; i++) {
+      			var num;
+      			if(canRepeat) {
+      				num = Utilities.rndi(min, max);
+      			}else{
+      				num = Utilities.rndi(min, max);
+      				while(tmp.indexOf(num) > -1) {
+      					num = Utilities.rndi(min, max);
+      				}
+      				tmp.push(num);
+      			}
+      			output.push(num);
+      		}
+      		return output;
+        }
+      },
+
+      Rndi : function() {
+        var _min, _max, quantity, random = Math.random, round = Math.round, canRepeat, range;
+    
+        if(arguments.length === 0) {
+          _min = 0; _max = 1;
+        }else if(arguments.length === 1) {
+          _max = arguments[0]; _min = 0;
+        }else if(arguments.length === 2) {
+          _min = arguments[0]; _max = arguments[1];
+        }else if(arguments.length === 3) {
+          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2];
+        }else{
+          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2]; canRepeat = arguments[3];
+        }  
+  
+        range = _max - _min
+        if( typeof quantity === 'number' && range < quantity ) canRepeat = true
+  
+        return function() {
+          var value, min, max, range;
+    
+          min = typeof _min === 'function' ? _min() : _min
+          max = typeof _max === 'function' ? _max() : _max
+    
+          if( typeof quantity === 'undefined') {
+            value = Utilities.rndi( min, max )
+          }else{
+            value = Utilities.rndi( min, max, quantity, canRepeat )
+          }
+    
+          return value;
+        }
+      },
+      export : function( target ) {
+        target.rndi = Utilities.rndi
+        target.rndf = Utilities.rndf
+        target.Rndi = Utilities.Rndi
+        target.Rndf = Utilities.Rndf
+        
+        target.future = Utilities.future
+        target.solo = Utilities.solo
+      },
+      init: function() {
+        // window.solo = Utilities.solo
+        // window.future = Utilities.future // TODO: fix global reference
+        Array.prototype.random = Array.prototype.rnd = Utilities.random
+        Array.prototype.weight = Utilities.weight
+        Array.prototype.fill = Utilities.fill
+        Array.prototype.choose = Utilities.choose
+        // Array.prototype.Rnd = Utilities.random2
+        Array.prototype.merge = Utilities.merge
+      }  
+    }
+  
+  return Utilities
+}
+
+},{}],5:[function(_dereq_,module,exports){
 /**#Interface
 A singleton object holding all widget constructors and a couple of other methods / properties. It is automatically created as soon as interface.js is loaded.
 **/
@@ -230,7 +2033,6 @@ Interface.Panel = function() {
     
     touchEvent : function(event) {
       if(self.active) {
-        console.log( event )
         if( typeof event.changedTouches === 'undefined' && event.originalEvent ) {
           event.changedTouches = event.originalEvent.changedTouches
         }
@@ -330,6 +2132,7 @@ Interface.Panel = function() {
         }
         this.shouldDraw.length = 0;
       }
+      $.publish('/draw')
     },
     
     getWidgetWithName: function( name ) {
@@ -866,6 +2669,206 @@ Interface.Widget = {
   ],
 };
 
+
+Interface.HBox = function() {
+  var me = this
+  Interface.extend(this, {
+    type : 'HBox',    
+    
+    children: [],
+    proxyPanel : { active:true, x:0, y:0, width:1, height:1, shouldDraw:[], useRelativeSizesAndPositions:true }, // needed for absolute widths / heights which are set in _init call
+    
+    add: function() {
+      for( var i = 0; i < arguments.length; i++ ) {
+        var child = arguments[ i ]
+        if( this.children.indexOf( child ) === -1 ) this.children.push( child )
+        child.panel = this.proxyPanel
+        child.ctx = this.panel.ctx
+      }
+      
+      this.layout()
+      this.draw()
+    },
+    
+    layout : function() {
+      var w = (this.width / this.children.length) / this.width,
+          _widthUsed = 0;
+      
+      for( var i = 0; i < this.children.length; i++ ) {
+        var child = this.children[ i ]
+        
+        child.x = _widthUsed + this.x
+        child.y = this.y * (1 / this.height)
+        
+        child.width = w 
+        child.height = 1
+        
+        _widthUsed += w
+      }
+      return this
+    },
+    
+    draw: function() {
+      this.proxyPanel.width = this._width()
+      this.proxyPanel.height = this._height()
+      
+      for( var i = 0; i < this.children.length; i++ ) {
+        this.children[ i ].draw()
+      }
+    },
+    
+    refresh: function() {      
+      for( var i = 0; i < this.proxyPanel.shouldDraw.length; i++ ) {
+        this.proxyPanel.shouldDraw[ i ].draw()
+      }
+      this.proxyPanel.shouldDraw.length = 0
+    },
+    
+    mouseEvent: function(e){
+      // e.x -= this._x()
+      // e.y -= this._y()
+      for( var i = 0; i < this.children.length; i++ ) { 
+        var child = this.children[ i ]
+        
+        this.children[ i ].mouseEvent( e ) 
+      } 
+    },
+    
+    touchEvent: function(e){
+      // e.x -= this._x()
+      // e.y -= this._y()
+      for( var i = 0; i < this.children.length; i++ ) { 
+        var child = this.children[ i ]
+        
+        this.children[ i ].touchEvent( e ) 
+      } 
+    },
+
+    _init: function() {
+      this.useRelativeSizesAndPositions = this.panel.useRelativeSizesAndPositions
+      this.proxyPanel.width = this._width()
+      this.proxyPanel.height = this._height()
+      this.proxyPanel.__proto__ = this.panel
+      
+      $.subscribe('/draw', this.refresh.bind( this ) )
+      
+      Object.defineProperties(this, {
+        bounds : {
+          configurable: true,
+          get : function() { return bounds; },
+          set : function(_bounds) { 
+            bounds = _bounds; this.x = bounds[0]; this.y = bounds[1]; this.width = bounds[2]; this.height = bounds[3]; 
+            this.layout()
+            this.draw()
+          }
+        },
+      })
+    }
+  })
+  .init( arguments[0] )
+};
+Interface.HBox.prototype = Interface.Widget;
+
+Interface.VBox = function() {
+  Interface.extend(this, {
+    type : 'VBox',    
+    
+    children: [],
+    proxyPanel : { active:true, x:0, y:0, width:1, height:1, shouldDraw:[], useRelativeSizesAndPositions:true }, // needed for absolute widths / heights which are set in _init call
+    
+    add: function() {
+      for( var i = 0; i < arguments.length; i++ ) {
+        var child = arguments[ i ]
+        this.children.push( child )
+        child.panel = this.proxyPanel
+        child.ctx = this.panel.ctx
+      }
+      
+      this.layout()
+      this.draw()
+    },
+    
+    layout : function() {
+      var h = this.height  / this.children.length,
+          _heightUsed = 0;
+      
+      for( var i = 0; i < this.children.length; i++ ) {
+        var child = this.children[ i ]
+        
+        child.x = this.x
+        child.y = (this.y + _heightUsed ) * (1 / this.height)
+        //
+        child.width = 1
+        child.height = h * ( 1/this.height)
+        
+        _heightUsed += h
+      }
+      
+      return this
+    },
+    
+    draw: function() {
+      this.proxyPanel.width = this._width()
+      this.proxyPanel.height = this._height()
+      
+      for( var i = 0; i < this.children.length; i++ ) {
+        this.children[ i ].draw()
+      }
+    },
+    
+    refresh: function() {      
+      for( var i = 0; i < this.proxyPanel.shouldDraw.length; i++ ) {
+        this.proxyPanel.shouldDraw[ i ].draw()
+      }
+      this.proxyPanel.shouldDraw.length = 0
+    },
+    
+    mouseEvent: function(e){
+      // e.x -= this._x()
+      // e.y -= this._y()
+      for( var i = 0; i < this.children.length; i++ ) { 
+        var child = this.children[ i ]
+        
+        this.children[ i ].mouseEvent( e ) 
+      } 
+    },
+    
+    touchEvent: function(e){
+      e.x -= this._x()
+      e.y -= this._y()
+      for( var i = 0; i < this.children.length; i++ ) { 
+        var child = this.children[ i ]
+        
+        this.children[ i ].touchEvent( e ) 
+      } 
+    },
+
+    _init: function() {
+      this.useRelativeSizesAndPositions = this.panel.useRelativeSizesAndPositions
+      this.proxyPanel.width = this._width()
+      this.proxyPanel.height = this._height()
+      this.proxyPanel.__proto__ = this.panel
+      
+      $.subscribe('/draw', this.refresh.bind( this ) )
+      
+      Object.defineProperties(this, {
+        bounds : {
+          configurable: true,
+          get : function() { return bounds; },
+          set : function(_bounds) { 
+            bounds = _bounds; this.x = bounds[0]; this.y = bounds[1]; this.width = bounds[2]; this.height = bounds[3]; 
+            this.layout()
+            this.draw()
+          }
+        },
+      })
+    }
+  })
+  .init( arguments[0] )
+};
+Interface.VBox.prototype = Interface.Widget;
+
+
 /**#Interface.Slider - Widget
 A vertical or horizontal slider.
 
@@ -1221,9 +3224,6 @@ String. A text label to print at the textLocation coordinates of the button.
 Set. A set of x and y coordinates which position the the label within the bounds.
 **/
 
-
-
-
 Interface.ButtonV = function() {
   Interface.extend(this, {
     type : 'ButtonV',    
@@ -1423,11 +3423,10 @@ Interface.ButtonV = function() {
       }
     },
     touchend   : function(e) {
-      this.isTouchOver = false;
-      if( this.requiresFocus || ( !this.requiresFocus && this.isTouchOver) ) {
-        this.isTouchOver = false;
+      if( this.momentary && this.requiresFocus || ( !this.requiresFocus && this.isTouchOver) ) {
         this.changeValue();
       }
+      this.isTouchOver = false;
     },
   })
   .init( arguments[0] );
@@ -1438,8 +3437,7 @@ Interface.ButtonV.prototype = Interface.Widget;
 /**#Interface.Piano - Widget
 A piano with adjustable ranges of pitches 
 
-*contributed by Jonathan Simozar
-
+*contributed by Jonathan Simozar, with modifications by thecharlie
 
 ## Example Usage##
 `var c = new Interface.Piano({ 
@@ -2439,7 +4437,7 @@ Interface.XY = function() {
     touchmove : function(touch) {
       for(var t = 0; t < this.children.length; t++) {
         _t = this.children[t];
-        if(touch.identifier == _t.identifier) {
+        if(touch.identifier === _t.identifier) {
           this.changeValue(_t, touch.x - this._x(), touch.y - this._y());
 
           var now = {x:touch.x - this._x(), y:touch.y - this._y()};
@@ -2458,8 +4456,10 @@ Interface.XY = function() {
         var _t = this.children[t];
         
         if(touch.identifier === _t.identifier) {
-          _t.vx = _t.velocity.x;
-          _t.vy = _t.velocity.y;
+          if( _t.velocity ) {
+            _t.vx = _t.velocity.x;
+            _t.vy = _t.velocity.y;
+          }
           
           _t.lastPosition = null;
           _t.isActive = false;
@@ -2679,10 +4679,11 @@ Interface.Label = function() {
           rect.x =  x - metrics.width;
           break;
       }
+
       switch(this.vAlign) {
         case 'middle':
           y = (this._y() + this._height() / 2)
-          rect.y = y - metrics.height / 2;
+          rect.y = y - this.size / 2;
           break;
         case 'top':
           y = this._y();
@@ -2690,7 +4691,7 @@ Interface.Label = function() {
           break; 
         case 'bottom':
           y = this._y() + this._height();
-          rect.y =  y - metrics.height;
+          rect.y =  y - this.size / 2;
           break;
       }
       this.ctx.clearRect(rect.x, rect.y, rect.width, rect.height * 2);      
@@ -2855,6 +4856,21 @@ Interface.MultiSlider = function() {
       this.values[ sliderNum ] = value
       this._values[ sliderNum ] = value
       this.refresh()
+    },
+    resetValues : function() {
+      for( var i = 0; i < this.count; i++ ) {
+        this.values[ i ] = this.min + (this.max - this.min) * this._values[ i ];
+        
+        if(this.target !== "OSC") {
+          this.sendTargetMessage();
+        }else{
+          if(Interface.OSC)
+            Interface.OSC.send( this.key, 'if', [ sliderHit, this.values[ sliderHit ] ] );
+        }
+        if(this.onvaluechange) this.onvaluechange(sliderHit, this.values[ sliderHit ]);
+      }
+      
+      this.refresh();
     },
     changeValue : function( xOffset, yOffset ) {
       if(this.hasFocus || !this.requiresFocus) {
@@ -3593,83 +5609,349 @@ Interface.Paint = function() {
         this.animate()
       }
     },
-    /*
-    trackTouch : function(xPos, yPos, _touch) {
-      var closestDiff = 10000;
-      var touchFound = null;
-      var touchNum = null;
-      
-      for(var i = 0; i < this.children.length; i++) {
-        var touch = this.children[i];
-        var xdiff = Math.abs(touch.x - xPos);
-        var ydiff = Math.abs(touch.y - yPos);
-
-        if(xdiff + ydiff < closestDiff && !touch.isActive) {
-          closestDiff = xdiff + ydiff;
-          touchFound = touch;
-          touchNum = i;
-        }
-      }
-      
-      touchFound.isActive = true;
-      touchFound.vx = 0;
-      touchFound.vy = 0;
-      touchFound.identifier = _touch.identifier;
-      touchFound.childID = touchNum;
-
-      if(touchFound != null)
-        this.changeValue(touchFound, xPos, yPos);
-    
-      this.lastTouched = touchFound;
-      return touchFound.childID;
-    },
     touchstart : function(touch) {
-      // if(this.hitTest(touch)) {
-      //   this.trackTouch(touch.x - this.x, touch.y - this.y, touch);
-      // }
-    },
-    touchmove : function(touch) {
-      for(var t = 0; t < this.children.length; t++) {
-        _t = this.children[t];
-        if(touch.identifier == _t.identifier) {
-          this.changeValue(_t, touch.x - this._x(), touch.y - this._y());
-
-          var now = {x:touch.x - this._x(), y:touch.y - this._y()};
-          
-          if(_t.lastPosition !== null) {
-            _t.velocity = {x:now.x - _t.lastPosition.x, y:now.y - _t.lastPosition.y };
-          }
-          _t.lastPosition = now;
-        }
-      }
-    },
-    touchend : function(touch) {
-      var found = false;
-      var tu = null;
-      for(var t = 0; t < this.children.length; t++) {
-        var _t = this.children[t];
+      if(this.hitTest(touch)) {
+        this.lines = []
+        this.animationPoint = 0
         
-        if(touch.identifier === _t.identifier) {
-          _t.vx = _t.velocity.x;
-          _t.vy = _t.velocity.y;
-          
-          _t.lastPosition = null;
-          _t.isActive = false;
-          
+        if( this.lines.length === 0 ) {
+          this.startTime = Date.now()
+        }
 
-          found = true;
-          tu = t.childID;
+        this.lines.push( [] )
+        this.isDrawing = true;
+        this.isAnimating = false;
+      }
+      
+      this.activeTouch = touch
+    },
+    
+    touchmove : function(touch) {
+      if(this.hitTest(touch) && this.activeTouch !== null) {
+        if( this.isDrawing ) {
+          var points = this.lines[ this.lines.length - 1 ]
+          if( points ) {
+            points.push({ x:touch.x / this._width(), y:touch.y / this._height(), timestamp: Date.now() - this.startTime })
+            this.draw()
+          }
+        }  
+      }
+    },
+    
+    touchend : function(touch) {
+      this.isDrawing = false
+      if( this.lines.length > 0 ) {
+        this.isAnimating = true;
+        this.animate()
+      }
+    },
+  })
+  .init( arguments[0] );
+}
+Interface.Paint.prototype = Interface.Widget;
+
+Interface.Patchbay = function() {
+  Interface.extend(this, {
+    type:"Patchbay",
+    points: [],
+    minWidth:80,
+    cableWidth:5,
+    start:null,
+    over:null,
+    connections:[],
+    rowLength:null,
+    selectedConnection: null,
+    patchOutlineWidth:3,
+    
+    draw : function() {
+      var x = this._x(), y = this._y(), width = this._width(), height = this._height(),
+          length = this.points.length
+        
+      this.ctx.fillStyle = this._background();
+      this.ctx.strokeStyle = this._stroke();
+      this.ctx.clearRect(x, y, width, height);          
+      
+      this.layout()
+      this.drawSegments()
+      this.drawPatchPoints()
+      this.drawConnections()
+      //this.drawLabels()
+    },
+    
+    layout: function() {
+      var x = this._x(), y = this._y(), width = this._width(), height = this._height()
+      
+      this.rows = 1
+      
+      this.patchWidth = width / this.points.length
+      
+      if( this.patchWidth < this.minWidth ) {
+        this.patchWidth = this.minWidth
+      }
+      
+      this.rows = Math.ceil( (this.patchWidth * this.points.length) / width )
+            
+      this.patchHeight = height / this.rows
+      
+      
+      this.columns = Math.floor( width / this.patchWidth )
+    },
+    
+    drawSegments : function() {
+      var x = this._x(), y = this._y(), width = this._width(), height = this._height(),
+          length = this.points.length
+          
+      this.ctx.fillStyle = this._fill();
+
+      var totalWidth = 0, row = 1
+      
+      //console.log("SEGMENT, START:", this.start, 'OVER:', this.over )
+      for( var i = 0; i < this.points.length; i++ ) {
+        if( this.start === i ) {
+          this.ctx.fillStyle = "#777"            
+          this.ctx.fillRect(x + totalWidth, y + (this.patchHeight * (row-1)), this.patchWidth, this.patchHeight  );
+        }else if( this.over === i ) {
+          this.ctx.fillStyle = "#744"
+          this.ctx.fillRect(x + totalWidth, y + (this.patchHeight * (row-1)), this.patchWidth, this.patchHeight );
+        }
+        
+        this.ctx.fillStyle = this._stroke()
+        this.ctx.textBaseline = 'middle'
+        this.ctx.textAlign = 'center'
+        this.ctx.font = this._font()
+        this.ctx.font = 'normal 12px Helvetica'
+        
+        if( typeof this.points[i].name !== 'undefined' ) { 
+          this.ctx.fillText( this.points[ i ].name ,  totalWidth + this.patchWidth / 2, y + ((row-1) * this.patchHeight + .1 * this.patchHeight)  )
+        }
+        
+        if( typeof this.points[i].name2 !== 'undefined' ) {
+          this.ctx.fillText( this.points[ i ].name2 , totalWidth + this.patchWidth / 2, y + ((row-1) * this.patchHeight + .9 * this.patchHeight)  )
+        }
+  
+        totalWidth += this.patchWidth
+        
+        this.points[ i ].row = row
+        
+        if( totalWidth + this.patchWidth > width ) {
+          totalWidth = 0
+          row++
         }
       }
-      if(found) { this.touchUp = tu; }
-      //if(!found) console.log("NOT FOUND", touch.identifier);
     },
-    */
+    
+    drawPatchPoints : function() {
+      var x = this._x(), y = this._y(), width = this._width(), height = this._height(),
+          length = this.points.length
+          
+      this.ctx.fillStyle = this._background();
+    
+      var totalWidth = 0, row = 1
+      for( var i = 0; i < this.points.length; i++ ) {
+        //this.ctx.fillRect(totalWidth, y, patchWidth, patchHeight);
+        this.ctx.beginPath()
+        this.ctx.arc( totalWidth + this.patchWidth / 2, y + this.patchHeight / 2 + (this.patchHeight * (row-1)), this.patchWidth/4, 0, Math.PI*2, true); 
+        this.ctx.closePath()
+        
+        this.ctx.fill()
+        
+        this.ctx.lineWidth = this.patchOutlineWidth
+        this.ctx.stroke()
+        
+        this.points[i].row = row
+        
+        this.ctx.lineWidth = 1
+        this.ctx.strokeRect(totalWidth, y + (this.patchHeight * (row-1)), this.patchWidth, this.patchHeight );
+              
+        totalWidth += this.patchWidth
+        if( totalWidth + this.patchWidth > width ) {
+          totalWidth = 0
+          row++
+        }
+      }
+      
+      //console.log("TOTAL ROWS = ", row )
+    },
+    
+    drawConnections : function() {
+      var x = this._x(), y = this._y(), width = this._width(), height = this._height()
+      
+      this.ctx.lineWidth = this.cableWidth
+      
+      for( var i = 0; i < this.connections.length; i++ ) {
+        var connection = this.connections[ i ],
+            origin = this.connections[ i ][ 0 ],
+            destination = this.connections[ i ][ 1 ],
+            startX = x + this.patchWidth * (origin % this.columns) + this.patchWidth / 2,
+            startY = y + (this.patchHeight / 2) + (this.patchHeight * Math.floor(origin / this.columns) ),
+            endX   = x + this.patchWidth * (destination % this.columns) + this.patchWidth / 2,
+            endY   = y + (this.patchHeight / 2) + (this.patchHeight * Math.floor(destination / this.columns) ),
+            ctrl1X = startX,
+            ctrl1Y = startY + this.patchHeight * .5,
+            ctrl2X = endX,
+            ctrl2Y = endY + this.patchHeight * .5
+        
+            //console.log( "ORIGIN", this.points[origin].row, "DESTINATION", this.points[destination].row )
+        if( connection.selected ) {
+          this.ctx.strokeStyle = '#0f0'
+        }else{
+          var grd = this.ctx.createLinearGradient(startX, startY, endX, endY);
+          
+          grd.addColorStop( 0.000, 'rgba(64, 64, 64, 1.000)' )          
+          grd.addColorStop( 1.000, 'rgba(204, 204, 204, 1.000)' )
+
+          
+          this.ctx.strokeStyle = grd
+        }
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo( startX, startY )
+        this.ctx.bezierCurveTo( ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, endX, endY );
+        this.ctx.stroke()
+
+        connection.edge = [startX, startY, ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, endX, endY]
+      }
+    },
+    
+    _init : function() {
+      var x = this._x(),
+          y = this._y(),
+          width = this._width(),
+          height= this._height()
+          
+      this.patchWidth = width / this.points.length
+      this.patchHeight = height
+      this.rows = 1 
+    },
+    
+    createConnection : function( connection ) {
+      var start = this.points[ connection[0] ],
+          end   = this.points[ connection[1] ]
+      
+      if( end.output !== false ) {
+        this.connections.push( connection )
+      
+        if( this.onconnection ) { 
+          this.onconnection( start, end ) 
+        }
+      }
+    },
+    
+    changeValue : function( xOffset, yOffset ) {  },
+    
+    hitTestEdges: function(e) {
+      var hit = false,
+          x = e.x - this._x(),
+          y = e.y - this._y()
+      
+      for( var i = 0; i < this.connections.length; i++ ) {
+        var edge = this.connections[ i ].edge
+        
+        this.ctx.beginPath()
+        this.ctx.moveTo( edge[0], edge[1] )
+        this.ctx.bezierCurveTo( edge[2], edge[3], edge[4], edge[5], edge[6], edge[7] );
+        if( this.ctx.isPointInStroke( x,y ) ) {
+          this.connections.forEach( function( elem, index, array ){
+            elem.selected = false
+          })
+          
+          this.connections[ i ].selected = true
+          this.selectedConnection = this.connections[ i ]
+          
+          hit = true
+          
+          break;
+        }
+      }
+      
+      return hit
+    },
+  
+    mousedown : function(e, hit) {
+      if( hit && Interface.mouseDown ) {
+        if( !this.hitTestEdges( e ) ) {
+          //this.start = Math.floor( ( e.x - this._x() / this._width() / this.rows ) / ( this._width() / this.points.length / this.rows ) )
+          var _x = Math.floor( ( e.x - this._x() / this._width() ) / ( this._width() / this.columns ) ),
+              _y = Math.floor( ( e.y - this._y() / this._height()) / ( this._height() / this.rows ) )
+                        
+          this.start = _y * this.columns + _x
+          
+          if( this.selectedConnection !== null ) {
+            this.selectedConnection.selected = false
+            this.selectedConnection = null
+          }        
+        }
+        
+        this.draw()
+      }
+    },
+    mousemove : function(e, hit) { 
+      if( hit && Interface.mouseDown ) {
+        var _x = Math.floor( ( e.x - this._x() / this._width() ) / ( this._width() / this.columns) ),
+            _y = Math.floor( ( e.y - this._y() / this._height()) / ( this._height() / this.rows ) )
+            
+        var prevOver = this.over
+        this.over = _y * this.columns + _x
+        
+        if( this.over !== prevOver ) {
+          this.draw()
+        }
+      }
+    },
+    mouseup   : function(e, hit) { 
+      if( hit ) {
+        var _x = Math.floor( ( e.x - this._x() / this._width() ) / ( this._width() / this.columns ) ),
+            _y = Math.floor( ( e.y - this._y() / this._height()) / ( this._height() / this.rows ) ),
+            over = _y * this.columns + _x
+            
+        // var over = Math.floor( ( e.x - this._x() / this._width() / this.rows ) / ( this._width() / this.points.length / this.rows ) )
+        
+        if( this.start !== over && this.start !== null ) {
+          var connection = [ this.start, over ],
+              isFound = false
+              
+          for( var i = 0; i < this.connections.length; i++ ) {
+            if( this.connections[i][0] === connection[0] && this.connections[i][1] === connection[1] ) {
+              isFound = true
+            }
+          }
+          
+          if( !isFound ) this.createConnection( connection )
+        }
+      }
+      
+      this.over = null
+      this.start = null
+      this.draw()
+    },
+    
+    onkeydown: function(e) {
+      var key = Interface.keyCodeToChar[ e.keyCode ]
+            
+      if( key === 'Delete' || key === 'Backspace' ) {
+        if( this.selectedConnection !== null ) {
+          this.deleteConnection( this.selectedConnection )
+          e.preventDefault()
+        }
+      }
+    },
+    
+    deleteConnection: function( connection ) {
+      this.connections.splice( this.connections.indexOf( connection ), 1 )
+      
+      if( this.ondisconnection ) { this.ondisconnection( this.points[ connection[0] ], this.points[ connection[1] ] ) }
+      
+      this.draw()
+    },
+    
+    touchstart : function(e, hit) { if(hit) this.changeValue( e.x - this._x(), e.y - this._y() ); },
+    touchmove  : function(e, hit) { if(hit) this.changeValue( e.x - this._x(), e.y - this._y() ); },
+    touchend   : function(e, hit) { if(hit) this.changeValue( e.x - this._x(), e.y - this._y() ); },  
   })
   .init( arguments[0] );
 }
 
-Interface.Paint.prototype = Interface.Widget;
+Interface.Patchbay.prototype = Interface.Widget;
 
 Interface.defineChildProperties = function(widget, properties) {
   for(var j = 0; j < properties.length; j++) {
@@ -3689,10 +5971,40 @@ Interface.defineChildProperties = function(widget, properties) {
   }
 };
 
+(function ($) {
+	var cache = {};
+
+	$.publish = function(/* String */topic, /* Array? */args){
+		if(typeof cache[topic] === 'object') {	
+			cache[topic].forEach(function(property){
+				property.apply($, args || []);
+			});
+		}
+	};
+
+	$.subscribe = function(/* String */topic, /* Function */callback){
+		if(!cache[topic]){
+			cache[topic] = [];
+		}
+		cache[topic].push(callback);
+		return [topic, callback]; // Array
+	};
+
+	$.unsubscribe = function(/* Array */handle){
+		var t = handle[0];
+		cache[t] && $.each(cache[t], function(idx){
+			if(this == handle[1]){
+				cache[t].splice(idx, 1);
+			}
+		});
+	};
+
+})($);
+
 module.exports = Interface
 
 }()
-},{"jquery":2}],2:[function(_dereq_,module,exports){
+},{"jquery":6}],6:[function(_dereq_,module,exports){
 /*!
  * jQuery JavaScript Library v2.1.1
  * http://jquery.com/
@@ -12884,7 +15196,7 @@ return jQuery;
 
 }));
 
-},{}],3:[function(_dereq_,module,exports){
+},{}],7:[function(_dereq_,module,exports){
 module.exports = function( Gibber ) {
 
 var Interface = Gibber.Interface
@@ -13036,924 +15348,19 @@ var Autogui = {
 return Autogui
 
 }
-},{}],4:[function(_dereq_,module,exports){
-(function() {
-  
-"use strict"
-var times = [],
-    $ = _dereq_( './dollar' ),//require('zepto-browserify').Zepto,
-    curves = _dereq_('./mappings').outputCurves,
-    LINEAR = curves.LINEAR,
-    LOGARITHMIC = curves.LOGARITHMIC, 
-    Gibberish = {}, ///require( 'gibberish-dsp' ),
-    Gibber
-
-var Clock = {
-  seq : null, 
-  bpm : null,
-  maxMeasures: 44,
-  baseBPM : 120,
-  metronome : null,
-  currentBeat : 0,
-  beatsPerMeasure : 4,
-  codeToExecute : [],
-  signature: { lower: 4, upper: 4 },
-  sequencers:[],
-  timeProperties : [ 'attack', 'decay', 'sustain', 'release', 'offset', 'time' ],
-  phase : 0,
-  
-  processBeat : function() {
-    Clock.currentBeat = Clock.currentBeat >= Clock.signature.upper ? 1 : Clock.currentBeat + 1
-    
-    if( Clock.currentBeat === 1 && Clock.codeToExecute.length > 0) {
-      
-      for( var i = 0; i < Clock.codeToExecute.length; i++ ) {
-        try {
-					if( typeof Clock.codeToExecute[ i ].function === 'function' ) {
-						Clock.codeToExecute[ i ].function()
-					}else{
-            if( Gibber.Environment ) {
-              Gibber.Environment.modes[ Clock.codeToExecute[ i ].cm.doc.mode.name ]._run( Clock.codeToExecute[ i ].code, Clock.codeToExecute[ i ].pos, Clock.codeToExecute[ i ].cm )
-            }else{
-  	          Gibber.run( Clock.codeToExecute[ i ].code, Clock.codeToExecute[ i ].pos, Clock.codeToExecute[ i ].cm )
-            }
-					}
-        }catch( e ) {
-          console.error( "FAILED TO EXECUTE CODE:", Clock.codeToExecute[ i ].code , e)
-        }
-      }
-      
-      Clock.codeToExecute.length = 0
-    }
-    
-    if( Clock.metronome !== null ) {
-      Clock.metronome.draw( Clock.currentBeat, Clock.signature.upper )
-    }
-    
-    Clock.phase += Clock.beats( 1 )
-  },
-  
-  getTimeSinceStart : function() {
-    return Clock.phase + Clock.seq.phase
-  },
-  
-  reset : function() {
-    this.phase = 0
-    this.currentBeat = 0
-    this.rate = 1
-    this.start()
-  },
-  
-  tap : function() {
-    var time = Gibber.Clock.getTimeSinceStart()
-    if( times[2] && time - times[2] > 88200 ) {
-      times.length = 0
-    }
-    times.unshift( time )
-  
-    while( times.length > 3 ) times.pop()
-  
-    if( times.length === 3) {
-    	var average = ((times[0] + times[1]) - times[2] * 2) / 3.,
-          bps = 44100 / average,
-          bpm = bps * 60
-    
-      Gibber.Clock.bpm = bpm
-    }
-  },
-  
-  start : function( shouldInit ) {    
-    if( shouldInit ) {
-      $.extend( this, {
-        properties: { rate: 1 },
-        name:'master_clock',
-        callback : function( rate ) {
-          return rate
-        }
-      })
-    
-      this.__proto__ = new Gibberish.ugen()
-      this.__proto__.init.call( this )
-
-      var bpm = this.baseBPM
-      Object.defineProperty(Clock, 'bpm', {
-        get: function() { return bpm },
-        set: function(v) { 
-          bpm = v;
-          Clock.rate = bpm / Clock.baseBPM
-        }
-      })
-      
-      Object.defineProperty(this, 'timeSignature', {
-        get: function() { return Clock.signature.upper + '/' + Clock.signature.lower },
-        set: function(v) { 
-          var values = v.split('/')
-          if( values.length === 2 && ( values[0] !== Clock.signature.upper || values[1] !== Clock.signature.lower ) ) {
-            Clock.signature.upper = parseInt( values[0] )
-            Clock.signature.lower = parseInt( values[1] )
-            Clock.currentBeat = Clock.currentBeat != 1 ? 0 : 1
-          }
-        }
-      })
-      
-      Gibber.createProxyProperties( this, {
-        rate : { min: .1, max: 2, output: LINEAR, timescale: 'audio' },
-        bpm : { min: 20, max: 200, output: LINEAR, timescale: 'audio' },        
-      })
-    }
-    
-    Clock.seq = new Gibberish.PolySeq({
-      seqs : [{
-        target:Clock,
-        values: [ Clock.processBeat.bind( Clock ) ],
-        durations:[ 1/4 ],
-      }],
-      rate: Clock,
-    })
-    Clock.seq.connect().start()
-    Clock.seq.timeModifier = Clock.time.bind( Clock )
-  },
-  
-  addMetronome: function( metronome ) {
-    this.metronome = metronome
-    this.metronome.init()
-  },
-  
-  time : function(v) {
-    var timeInSamples, beat;
-    
-    if( v < this.maxMeasures ) {
-      timeInSamples = Clock.beats( v * Clock.signature.lower )
-    }else{
-      timeInSamples = v
-    }
-        
-    return timeInSamples
-  },
-  
-  Time : function(v) {
-    var timeFunction, beat;
-    
-    if( v < this.maxMeasures ) {
-      timeFunction = Clock.Beats( v * Clock.signature.lower )
-    }else{
-      timeFunction = Clock.Beats( v )
-    }
-    
-    return timeFunction
-  },
-  
-  beats : function(val) {
-    var sampleRate = typeof Gibberish.context !== 'undefined' ? Gibberish.context.sampleRate : 44100,
-        samplesPerBeat = sampleRate / ( Clock.baseBPM / 60 )
-        
-    return samplesPerBeat * ( val * ( 4 / Clock.signature.lower ) );
-  },
-  
-  Beats : function(val) {
-    return function() {
-      return Gibber.Clock.beats( val )
-    }
-  }
-}
-
-module.exports = function( __Gibber ) { if( typeof Gibber === 'undefined' ) { Gibber = __Gibber; } return Clock; }
-
-})()
-},{"./dollar":5,"./mappings":8}],5:[function(_dereq_,module,exports){
-(function (global){
+},{}],8:[function(_dereq_,module,exports){
 !function() {
 
-"use strict"
-
-var hasZepto = typeof Zepto === 'function',
-    hasJQuery = typeof jQuery === 'function',
-    has$ = typeof global.$ === 'object' || typeof global.$ === 'function',
-    $ = null,
-    hasConflict = hasZepto || hasJQuery || has$,
-    isArray = Array.isArray,
-    isObject = function( obj ) { return typeof obj === 'object' },
-    isPlainObject = function( obj ) {
-      return isObject(obj) && Object.getPrototypeOf( obj ) == Object.prototype
-    }
-
-if( !hasConflict ) {
-  $ = {}
-}else if( hasJQuery ) {
-  $ = jQuery 
-}else if( hasZepto ) {
-  $ = Zepto
-}else if( has$ ){
-  $ = global.$
-}else{
-  $ = {}
-}
-
-// taken from Zepto: zeptojs.com
-function extend(target, source, deep) {
-  for (var key in source)
-    if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
-      if (isPlainObject(source[key]) && !isPlainObject(target[key]))
-        target[key] = {}
-      if (isArray(source[key]) && !isArray(target[key]))
-        target[key] = []
-      extend(target[key], source[key], deep)
-    }
-    else if (source[key] !== undefined) target[key] = source[key]
-}
-
-if( !hasConflict ) {
-  // Copy all but undefined properties from one or more
-  // objects to the `target` object.
-  $.extend = function( target ){
-    var deep, args = Array.prototype.slice.call(arguments, 1)
-
-    if (typeof target === 'boolean') {
-      deep = target
-      target = args.shift()
-    }
-    args.forEach(function(arg){ extend(target, arg, deep) })
-    return target
-  }
-  
-  $.isArray = Array.isArray 
-  $.isPlainObject = isPlainObject
-
-  $.type = function( val ) {
-    return typeof val
-  }
-}
-
-var events = {}
-$.subscribe   = function( key, fcn ) { 
-  if( typeof events[ key ] === 'undefined' ) {
-    events[ key ] = []
-  }
-  events[ key ].push( fcn )
-}
-
-$.unsubscribe = function( key, fcn ) {
-  if( typeof events[ key ] !== 'undefined' ) {
-    var arr = events[ key ]
-    
-    arr.splice( arr.indexOf( fcn ), 1 )
-  }
-}
-
-$.publish = function( key, data ) {
-  if( typeof events[ key ] !== 'undefined' ) {
-    var arr = events[ key ]
-    for( var i = 0; i < arr.length; i++ ) {
-      arr[ i ]( data )
-    }
-  }
-}
-
-module.exports = $
-
-}()
-}).call(this,typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],6:[function(_dereq_,module,exports){
-(function() {
-//"use strict" 
-// can't use strict because eval is used to evaluate user code in the run method
-// I should wrap this in a Function call instead...
-var $ = _dereq_( './dollar' )
-
-var Gibber = {
-  Presets: {},
-  GraphicsLib: {},
-  Binops: {},
-  scale : null,
-  minNoteFrequency:50,
-  started:false,
-  
-  export: function( target ) {
-    Gibber.Utilities.export( target )
-    
-    if( Gibber.Audio ) {
-      Gibber.Audio.export( target )
-    }
-    
-    if( Gibber.Graphics ) {
-      Gibber.Graphics.export( target )
-    }
-    
-    if( Gibber.Interface ) {
-      Gibber.Interface.export( target )
-    }
-  },
-  
-  init: function( _options ) {                        
-      if( typeof window === 'undefined' ) { // check for node.js
-        window = GLOBAL // is this a good idea? makes a global window available in all files required in node
-        document = GLOBAL.document = false
-      }else if( typeof GLOBAL !== 'undefined' ) { // I can't remember why I put this in there...
-        if( !GLOBAL.document ) document = GLOBAL.document = false
-      }
-      
-      var options = {
-        globalize: true,
-        canvas: null,
-        target: window,
-        graphicsMode:'3d'
-      }
-      
-      if( typeof _options === 'object' ) $.extend( options, _options )
-      
-      if( Gibber.Audio ) {
-        Gibber.Audio.init() 
-      
-        if( options.globalize ) {
-          options.target.Master = Gibber.Audio.Master    
-        }else{
-          $.extend( Gibber, Gibber.Audio )
-        }
-      }
-      
-      if( Gibber.Graphics ) {
-        //Gibber.Graphics.init( options.graphicsMode )
-      }
-      
-      if( Gibber.Interface ) {
-        //Gibber.Interface.init()
-      }
-      
-      if( options.globalize ) {
-        Gibber.export( options.target )
-      }
-      
-      options.target.$ = $ // TODO: geez louise
-            
-      Gibber.Utilities.init()
-      
-      Gibber.isInstrument = true
-  },
-  // interfaceIsReady : function() {
-  //   if( !Gibber.started ) {
-  //     if( typeof Gibber.Audio.context.currentTime !== 'undefined' ) {
-  //       Gibber.started = true
-  //       if( Gibber.isInstrument ) eval( loadFile.text )
-  //     }
-  //   }
-  // },
-  Modules : {},
- 	import : function( path, exportTo ) {
-    var _done = null;
-    console.log( 'Loading module ' + path + '...' )
-
-    if( path.indexOf( 'http:' ) === -1 ) { 
-      console.log( 'loading via post', path )
-      $.post(
-        Gibber.Environment.SERVER_URL + '/gibber/'+path, {},
-        function( d ) {
-          d = JSON.parse( d )
-          eval( d.text )
-          
-          if( exportTo && Gibber.Modules[ path ] ) {
-            $.extend( exportTo, Gibber.Modules[ path ] )
-            Gibber.Modules[ path ] = exportTo
-          }  
-          if( Gibber.Modules[ path ] ) {
-            if( Gibber.Modules[ path ].init ) {
-              Gibber.Modules[ path ].init()
-            }
-            console.log( 'Module ' + path + ' is now loaded.' )
-          }else{
-            console.log( 'Publication ' + path + ' is loaded. It may not be a valid module.')
-          }
-          
-          if( _done !== null ) { _done( Gibber.Modules[ path ] ) }
-
-          return false;
-        }
-      )
-    }else{
-      var script = document.createElement( 'script' )
-      script.src = path
-      
-      script.onload = function () {
-        console.log( 'Module ' + path + ' is now loaded.' )
-        if( _done !== null ) { _done() }
-      };
-
-      document.head.appendChild( script )
-    }
-    return { done: function( fcn ) { _done =  fcn } }
- 	},  
-  
-  // log: function( msg ) { 
-  //   //console.log( "LOG", typeof msg )
-  //   if( typeof msg !== 'undefined' ) {
-  //     if( typeof msg !== 'function') {
-  //       console.log( msg )
-  //     }else{
-  //       console.log( 'Function' )
-  //     }
-  //   }
-  // },
-  
-  scriptCallbacks: [],
-  
-  run: function( script, pos, cm ) { // called by Gibber.Environment.Keymap.modes.javascript
-		var _start = pos.start ? pos.start.line : pos.line,
-				tree
-    
-	  try{
-			tree = Gibber.Esprima.parse(script, { loc:true, range:true} )
-		}catch(e) {
-			console.error( "Parse error on line " + ( _start + e.lineNumber ) + " : " + e.message.split(':')[1] )
-			return
-		}
-    
-    // must wrap i with underscores to avoid confusion in the eval statement with commands that use proxy i
-    for( var __i__ = 0; __i__ < tree.body.length; __i__++ ) {
-      var obj = tree.body[ __i__ ],
-					start = { line:_start + obj.loc.start.line - 1, ch: obj.loc.start.column },
-					end   = { line:_start + obj.loc.end.line - 1, ch: obj.loc.end.column },
-				  src   = cm.getRange( start, end ),
-          result = null
-			
-			//console.log( start, end, src )
-			try{
-				result = eval( src )
-        if( typeof result !== 'function' ) {
-          log( result )
-        }else{
-          log( 'Function' )
-        }
-			}catch( e ) {
-				console.error( "Error evaluating expression beginning on line " + (start.line + 1) + '\n' + e.message )
-			}
-      
-      if( this.scriptCallbacks.length > 0 ) {
-        for( var ___i___ = 0; ___i___ < this.scriptCallbacks.length; ___i___++ ) {
-          this.scriptCallbacks[ ___i___ ]( obj, cm, pos, start, end, src, _start )
-        }
-      }
-    }
-  },
-  
-  processArguments: function(args, type) {    
-    var obj
-    
-    if( args.length ) {
-      if( typeof args[0] === 'string' && type !== 'Drums' && type !== 'XOX' ) {
-        obj = Gibber.getPreset( args[0], type )
-        
-        if( typeof args[1] == 'object' ) {
-          $.extend( obj, args[ 1 ] )
-        }
-        return obj
-      }
-      return Array.prototype.slice.call(args, 0)
-    }
-    
-    return obj
-  },
-  
-  processArguments2 : function(obj, args, type) {
-    if( args.length ) {
-      var firstArg = args[ 0 ]
-    
-      if( typeof firstArg === 'string' && type !== 'Drums' && type !== 'XOX' && type !== 'Shader' ) {
-        preset = Gibber.getPreset( args[0], type )
-      
-        if( typeof args[1] === 'object' ) {
-          $.extend( preset, args[ 1 ] )
-        }
-      
-        $.extend( obj, preset )
-        
-        if( obj.presetInit ) obj.presetInit() 
-      }else if( $.isPlainObject( firstArg ) && typeof firstArg.type === 'undefined' ) {
-        $.extend( obj, firstArg )
-      }else{
-        var keys = Object.keys( obj.properties )
-                
-        if( obj.type === 'FX' ) {
-          for( var i = 0; i < args.length; i++ ) { obj[ keys[ i + 1 ] ] = args[ i ] }
-        }else{
-          for( var i = 0; i < args.length; i++ ) { obj[ keys[ i ] ] = args[ i ] }
-        }
-        
-      }
-    }      
-  },
-    
-  getPreset: function( presetName, ugenType ) {
-    var obj = {}
-    
-    if( Gibber.Presets[ ugenType ] ) {
-      if( Gibber.Presets[ ugenType ][ presetName ] ) {
-        obj = Gibber.Presets[ ugenType ][ presetName ]
-      }else{
-        Gibber.log( ugenType + ' does not have a preset named ' + presetName + '.' )
-      }
-    }else{
-      Gibber.log( ugenType + ' does not have a preset named ' + presetName + '.' )
-    }
-    
-    return obj
-  },
-  
-  clear : function() {
-    if( Gibber.Audio ) Gibber.Audio.clear();
-    
-    if( Gibber.Graphics ) Gibber.Graphics.clear()
-
-    Gibber.proxy( window )
-		
-    $.publish( '/gibber/clear', {} )
-        
-    console.log( 'Gibber has been cleared.' )
-  },
-  
-  proxy: function( target ) {
-		var letters = "abcdefghijklmnopqrstuvwxyz"
-    
-		for(var l = 0; l < letters.length; l++) {
-			var lt = letters.charAt(l);
-      if( typeof window[ lt ] !== 'undefined' ) { 
-        delete window[ lt ] 
-        delete window[ '___' + lt ]
-      }
-
-      (function() {
-				var ltr = lt;
-      
-				Object.defineProperty( target, ltr, {
-          configurable: true,
-					get:function() { return target[ '___'+ltr] },
-					set:function( newObj ) {
-            if( newObj ) {
-              if( target[ '___'+ltr ] ) { 
-                if( typeof target[ '___'+ltr ].replaceWith === 'function' ) {
-                  target[ '___'+ltr ].replaceWith( newObj )
-                  console.log( target[ '___'+ltr ].name + ' was replaced with ' + newObj.name )
-                }
-              }
-              target[ '___'+ltr ] = newObj
-            }else{
-						  if( target[ '___'+ltr ] ) {
-						  	 var variable = target[ '___'+ltr ]
-						  	 if( variable ) {
-						  		 if( typeof variable.kill === 'function' /*&& target[ '___'+ltr ].destinations.length > 0 */) {
-						  			 variable.kill();
-						  		 }
-						  	 }
-						  }
-            }
-          }
-        });
-      })();     
-    }
-  },
-
-  construct: function( constructor, args ) {
-    function F() {
-      return constructor.apply( this, args );
-    }
-    F.prototype = constructor.prototype;
-    return new F();
-  },
-  
-  createMappingObject : function(target, from) {
-    var min = typeof target.min === 'function' ? target.min() : target.min,
-        max = typeof target.max === 'function' ? target.max() : target.max,
-        _min = typeof from.min === 'function' ? from.min() : from.min,
-        _max = typeof from.max === 'function' ? from.max() : from.max
-        
-    if( typeof from.object === 'undefined' && from.Value) { // if using an interface object directly to map
-      from = from.Value
-    }
-    
-    if( typeof target.object[ target.Name ].mapping !== 'undefined') {
-      target.object[ target.Name ].mapping.replace( from.object, from.name, from.Name )
-      return
-    }
-    
-    if( typeof from.targets !== 'undefined' ) {
-      if( from.targets.indexOf( target ) === -1 ) from.targets.push( [target, target.Name] )
-    }
-    
-    var fromTimescale = from.Name !== 'Out' ? from.timescale : 'audioOut' // check for audio Out, which is a faux property
-    
-    console.log( target.timescale, fromTimescale )
-    
-    mapping = Gibber.mappings[ target.timescale ][ fromTimescale ]( target, from )
-    
-    target.object[ target.name ].toString = function() { return '> continuous mapping: ' + from.name + ' -> ' + target.name }
-    
-    Object.defineProperties( target.object[ target.Name ], {
-      'min' : {
-        configurable:true,
-        get : function() { return min },
-        set : function(v) { min = v;  target.object[ target.Name ].mapping.outputMin = min }
-      },
-      'max' : {
-        configurable:true,
-        get : function() { return max },
-        set : function(v) { max = v; target.object[ target.Name ].mapping.outputMax = max }
-      },
-    })
-    
-    target.object[ target.Name ].mappingObjects = []
-    
-    Gibber.createProxyProperty( target.object[ target.Name ], 'min', 1, 0, {
-      'min':min, 'max':max, output: target.output,
-      timescale: target.timescale,
-      dimensions:1
-    })
-    
-    Gibber.createProxyProperty( target.object[ target.Name ], 'max', 1, 0, {
-      'min':min, 'max':max, output: target.output,
-      timescale: target.timescale,
-      dimensions:1
-    })
-    
-    Object.defineProperties( from.object[ from.Name ], {
-      'min' : {
-        configurable:true,
-        get : function() { return _min },
-        set : function(v) { _min = v; target.object[ target.Name ].mapping.inputMin = _min }
-      },
-      'max' : {
-        configurable:true,
-        get : function() { return _max },
-        set : function(v) { _max = v; target.object[ target.Name ].mapping.inputMax = _max }
-      },
-    })
-    
-    target.object[ target.Name ].invert = function() {
-      target.object[ target.Name ].mapping.invert()
-    }
-    
-    if( typeof target.object.mappings === 'undefined' ) target.object.mappings = []
-    
-    target.object.mappings.push( mapping )
-    
-    Gibber.defineSequencedProperty( target.object[ target.Name ], 'invert' )
-  },
-  
-  defineSequencedProperty : function( obj, key, priority ) {
-    var fnc = obj[ key ], seq, seqNumber
-    
-    // for( var i = obj.seq.seqs.length - 1; i >= 0; i-- ) {
-    //   var s = obj.seq.seqs[ i ]
-    //   if( s.key === key ) {
-    //     seq = s,
-    //     seqNumber = i
-    //     break;
-    //   }
-    // }
-    
-    if( !obj.seq ) {
-      obj.seq = Gibber.Audio.Seqs.Seq({ doNotStart:true, scale:obj.scale, priority:priority })
-    }
-    
-    fnc.seq = function( v,d ) {  
-
-      var args = {
-            key: key,
-            values: $.isArray(v) || v !== null && typeof v !== 'function' && typeof v.length === 'number' ? v : [v],
-            durations: $.isArray(d) ? d : typeof d !== 'undefined' ? [d] : null,
-            target: obj,
-            'priority': priority
-          }
-            
-      if( typeof seq !== 'undefined' ) {
-        seq.shouldStop = true
-        obj.seq.seqs.splice( seqNumber, 1 )
-      }
-      
-      obj.seq.add( args )
-      
-      seqNumber = obj.seq.seqs.length - 1
-      seq = obj.seq.seqs[ seqNumber ]
-      
-      if( args.durations === null ) { obj.seq.autofire.push( seq ) }
-      
-      Object.defineProperties( fnc.seq, {
-        values: {
-          configurable:true,
-          get: function() { return obj.seq.seqs[ seqNumber ].values },
-          set: function(v) {
-            if( !Array.isArray(v) ) {
-              v = [ v ]
-            }
-            if( key === 'note' && obj.seq.scale ) {  
-              v = makeNoteFunction( v, obj.seq )
-            }
-            obj.seq.seqs[ seqNumber ].values = v //.splice( 0, 10000, v )
-            //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].values, 'reverse' )
-          }
-        },
-        durations: {
-          configurable:true,
-          get: function() { return obj.seq.seqs[ seqNumber ].durations },
-          set: function(v) {
-            if( !Array.isArray(v) ) {
-              v = [ v ]
-            }
-            obj.seq.seqs[ seqNumber ].durations = v   //.splice( 0, 10000, v )
-            //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].durations, 'reverse' )  
-          }
-        },
-      })
-      
-      //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].values, 'reverse' )
-      //Gibber.defineSequencedProperty( obj.seq.seqs[ seqNumber ].durations, 'reverse' )      
-      
-      if( !obj.seq.isRunning ) {
-        obj.seq.offset = Gibber.Clock.time( obj.offset )
-        obj.seq.start( true, priority )
-      }
-      return obj
-    }
-    
-    fnc.seq.stop = function() { seq.shouldStop = true } 
-    
-    // TODO: property specific stop/start/shuffle etc. for polyseq
-    fnc.seq.start = function() {
-      seq.shouldStop = false
-      obj.seq.timeline[0] = [ seq ]                
-      obj.seq.nextTime = 0
-      
-      if( !obj.seq.isRunning ) { 
-        obj.seq.start( false, priority )
-      }
-    }
-  },
-  
-  defineRampedProperty : function( obj, _key ) {
-    var fnc = obj[ _key ], key = _key.slice(1), cancel
-    
-    fnc.ramp = function( from, to, length ) {
-      if( arguments.length < 2 ) {
-        console.err( 'ramp requires at least two arguments: target and time.' )
-        return
-      }
-      
-      if( typeof length === 'undefined' ) { // if only to and length arguments
-        length = to
-        to = from
-        from = obj[ key ]()
-      }
-      
-      if( cancel ) cancel()
-      
-      if( typeof from !== 'object' ) {
-        obj[ key ] = Line( from, to, length )
-      }else{
-        from.retrigger( to, Gibber.Clock.time( length ) )
-      }
-      
-      cancel = future( function() {
-        obj[ key ] = to
-      }, length )
-      
-      return obj
-    }
-  },
-  
-  createProxyMethods : function( obj, methods ) {
-    for( var i = 0; i < methods.length; i++ ) Gibber.defineSequencedProperty( obj, methods[ i ] ) 
-  },
-  
-  createProxyProperty: function( obj, _key, shouldSeq, shouldRamp, dict, _useMappings, priority ) {
-    var propertyName = _key,
-        useMappings = _useMappings === false ? false : true,
-        propertyDict = useMappings ? dict || obj.mappingProperties[ propertyName ] : null,
-        __n = propertyName.charAt(0).toUpperCase() + propertyName.slice(1),
-        mapping, fnc
-            
-    mapping = $.extend( {}, propertyDict, {
-      Name  : __n,
-      name  : propertyName,
-      type  : 'mapping',
-      value : obj[ propertyName ],
-      object: obj,
-      targets: [],
-			oldSetter: obj.__lookupSetter__( propertyName ),
-			oldGetter: obj.__lookupGetter__( propertyName ),
-      oldMappingGetter: obj.__lookupGetter__( __n ),
-      oldMappingSetter: obj.__lookupSetter__( __n ),          
-    })
-    
-    if( ! obj.mappingObjects ) obj.mappingObjects = []
-    // voodoo to make method act like property
-    obj.mappingObjects.push( mapping )
-    
-    var __propertyName = useMappings ? '_' + propertyName : propertyName
-    
-    fnc = obj[ '_' + propertyName ] = ( function() {
-      var _fnc = function(v) {
-        if( typeof v !== 'undefined' ) {
-          mapping.value = v
-          
-          if( mapping.oldSetter ) { mapping.oldSetter( mapping.value ) }
-          return obj
-        }
-        return mapping.value
-      }
-      return _fnc
-    })()    
-
-    fnc.valueOf = function() { return mapping.value }
-    mapping.toString = function() { return '> continuous mapping: ' + mapping.name  }
-    
-    if( useMappings ) {
-      Object.defineProperty( obj, propertyName, {
-        configurable: true,
-        get: function() { return obj[ '_' + propertyName ] },
-        set: function(v) { 
-          if( typeof v === 'object' && v.type === 'mapping' ) {
-            Gibber.createMappingObject( mapping, v )
-          }else{
-            if( typeof obj[ mapping.Name ].mapping !== 'undefined' ) { 
-              //if( obj[ mapping.Name ].mapping.op ) obj[ mapping.Name ].mapping.op.remove()
-              if( obj[ mapping.Name ].mapping.remove )
-                obj[ mapping.Name ].mapping.remove( true )
-            }
-
-            obj[ '_' + propertyName ]( v ) 
-          }
-          return obj
-        }
-      })
-    }else{
-      ( function() { 
-        var __fnc = fnc
-        Object.defineProperty( obj, propertyName, {
-          configurable: true,
-          get: function() { return obj['_'+propertyName] },
-          set: function(v) { 
-            obj['_'+propertyName]( v )
-            return obj
-          }
-        })
-      })()
-    }
-    
-    if( shouldSeq )
-      Gibber.defineSequencedProperty( obj, __propertyName, priority )
-    
-    if( shouldRamp )
-      Gibber.defineRampedProperty( obj, __propertyName )
-    
-    // capital letter mapping sugar
-    if( useMappings ) {
-      Object.defineProperty( obj, mapping.Name, {
-        configurable: true,
-        get : function()  {
-          if( typeof mapping.oldMappingGetter === 'function' ) mapping.oldMappingGetter()
-          return mapping 
-        },
-        set : function( v ) {
-          obj[ mapping.Name ] = v
-          if( typeof mapping.oldMappingSetter === 'function' ) mapping.oldMappingSetter( v )
-        }
-      })
-    }
-  },
-  
-  // obj, _key, shouldSeq, shouldRamp, dict, _useMappings, priority
-  createProxyProperties : function( obj, mappingProperties, noSeq, noRamp ) {
-    var shouldSeq = typeof noSeq === 'undefined' ? true : noSeq,
-        shouldRamp = typeof noRamp === 'undefined' ? true : noRamp
-    
-    obj.gibber = true // keyword identifying gibber object, needed for notation parser
-    
-    if( !obj.seq && shouldSeq ) {
-      obj.seq = Gibber.Audio.Seqs.Seq({ doNotStart:true, scale:obj.scale })      
-    }
-    
-    obj.mappingProperties = mappingProperties
-    obj.mappingObjects = []
-    
-    for( var key in mappingProperties ) {
-      if( ! mappingProperties[ key ].doNotProxy ) {
-        Gibber.createProxyProperty( obj, key, shouldSeq, shouldRamp )
-      }
-    }
-  },  
-}
-
-Gibber.Utilities = _dereq_( './utilities' )( Gibber )
-//Gibber.Audio = require( './audio' )( Gibber )
-Gibber.mappings = _dereq_( './mappings' )( Gibber, null )
-Gibber.Interface = _dereq_( './interface/interface' )( Gibber )
-//Gibber.Graphics = require( './graphics/graphics' )( Gibber )
+var Gibber = _dereq_( 'gibber.core.lib' )
+Gibber.Interface = _dereq_( './interface.js' )( Gibber )
+Gibber.isInstrument = true // don't use columns for interfaces
 
 module.exports = Gibber
-
-})()
-},{"./dollar":5,"./interface/interface":7,"./mappings":8,"./utilities":9}],7:[function(_dereq_,module,exports){
-var $ = _dereq_('../dollar')
-
+}()
+},{"./interface.js":9,"gibber.core.lib":2}],9:[function(_dereq_,module,exports){
 module.exports = function( Gibber ) {
-   
+  
+  var $ = Gibber.dollar
   // $script( 'external/autogui' , function() {
   //   Gibber.interfaceIsReady()
   // } )
@@ -13971,7 +15378,7 @@ module.exports = function( Gibber ) {
   var Interface = _dereq_( 'interface.js' )
   
   var I = {
-    autogui: _dereq_( '../../external/autogui' )( Gibber ),
+    autogui: _dereq_( './autogui' )( Gibber ),
     mode : 'local',
     client: 0,
     panel : null,
@@ -13988,16 +15395,18 @@ module.exports = function( Gibber ) {
           column = Layout.addColumn()
         }
       }else{
-        $( column.bodyElement ).empty()
+        column.bodyElement.innerHTML = ''
+        //$( column.bodyElement ).empty()
       }
+      
+      if( column.bodyElement.length ) column.bodyElement = column.bodyElement[ 0 ]
       
       var panel = new Interface.Panel({ container: column.bodyElement, useRelativeSizesAndPositions:true, font:'normal 16px Helvetica' })
       
-        panel.canvas.style.position = 'relative'
-        panel.canvas.style.width = column.bodyElement.innerWidth
-        panel.canvas.style.height = column.bodyElement.innerHeight
-      
-      
+      panel.canvas.style.position = 'relative'
+      panel.canvas.style.width = column.bodyElement.style.width
+      panel.canvas.style.height = column.bodyElement.style.height
+            
       this.panel = panel
       this.panel.column = column
       
@@ -14646,7 +16055,7 @@ module.exports = function( Gibber ) {
       target.VBox     = I.vbox
       target.Crossfader = I.crossfader
       target.Accelerometer = I.accelerometer
-      target.Orientation = I.orientation  
+      target.Orientation = I.orientation      
     }
   }
   
@@ -14694,1058 +16103,6 @@ module.exports = function( Gibber ) {
   return I
 }
 
-},{"../../external/autogui":3,"../dollar":5,"interface.js":1}],8:[function(_dereq_,module,exports){
-module.exports = function( Gibber, Gibberish ) {  
-  var mappings = {
-    audio : {
-      graphics: function( target, from ) {
-				if( typeof from.object.track === 'undefined' ) from.object.track = {}
-				
-        var proxy = typeof from.object.track[ from.name ] !== 'undefined' ? from.object.track[ from.name ] : new Gibberish.Proxy2( from.object, from.name ),
-            op    = new Gibberish.OnePole({ a0:.005, b1:.995 }),
-            mapping
-        
-        from.object.track = proxy;
-
-        mapping = target.object[ target.Name ].mapping = Map( proxy, target.min, target.max, from.min, from.max, target.output, from.wrap ) 
-        
-        op.input = mapping
-        
-        target.object[ target.name ] = op
-        
-        mapping.proxy = proxy
-        mapping.op = op
-        
-        mapping.remove = function( doNotSet ) {
-          if( !doNotSet ) {
-            target.object[ target.name ] = target.object[ target.Name ].mapping.getValue()
-          }
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        return mapping
-      },
-      interface: function( target, from ) {
-        var proxy = typeof from.track !== 'undefined' ? from.track : new Gibberish.Proxy2( from.object, from.name ),
-            op    = new Gibberish.OnePole({ a0:.005, b1:.995 }),
-            range = target.max - target.min,
-            percent = ( target.object[ target.name ] - target.min ) / range,
-            widgetValue = from.min + ( ( from.max - from.min ) * percent ),
-            mapping
-                
-        if( from.object.setValue ) from.object.setValue( widgetValue )
-        
-        from.track = proxy
-        
-        mapping = target.object[ target.Name ].mapping = Map( proxy, target.min, target.max, from.min, from.max, target.output, from.wrap ) 
-        
-        op.input = mapping
-        target.object[ target.name ] = op
-        
-        mapping.proxy = proxy
-        mapping.op = op
-
-        mapping.remove = function( doNotSet ) {
-          if( !doNotSet ) target.object[ target.name ] = mapping.getValue()
-          
-          //if( mapping.op ) mapping.op.remove()
-          
-          delete mapping
-        }
-        
-        if( typeof from.object.label !== 'undefined' ) { 
-          var labelString = ''
-          for( var i = 0; i < from.targets.length; i++ ) {
-            var __target = from.targets[ i ]
-            labelString += __target[0].object.name + '.' + __target[1]
-            if( i !== from.targets.length - 1 ) labelString += ' & '
-          }
-          from.object.label = labelString
-        }
-                
-        mapping.replace = function( replacementObject, key, Key  ) {
-          proxy.setInput( replacementObject )
-          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )
-        }
-        
-        return mapping
-      },
-      audio: function( target, from ) {
-        var proxy, mapping
-        
-        if( typeof from.object.track !== 'undefined' ) {
-          proxy = from.object.track
-          proxy.count++
-        } else {
-          proxy = new Gibberish.Proxy2( from.object, from.name )
-          proxy.count = 1
-        }
-        from.object.track = proxy
-        
-        target.object[ target.name ] = Map( proxy, target.min, target.max, from.min, from.max )
-        
-        mapping = target.object[ target.Name ].mapping = target.object[ target.name ]() // must call getter function explicitly
-        
-        mapping.remove = function( doNotSet ) {
-          if( !doNotSet ) {
-            target.object[ target.name ] = mapping.getValue()
-          }
-          
-          if( mapping.op ) mapping.op.remove()
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        mapping.replace = function( replacementObject, key, Key ) {
-          var proxy = new Gibberish.Proxy2( replacementObject, key )
-          mapping.input = proxy
-          if( replacementObject[ Key ].targets && replacementObject[ Key ].targets.indexOf( target ) === -1 ) {
-            replacementObject[ Key ].targets.push( [target, target.Name] )
-          }
-        }
-        
-        return mapping
-      },
-      audioOut : function( target, from ) {
-        var mapping
-        
-        target.object[ target.name ] = Map( null, target.min, target.max, 0, 1, 0 )   
-        mapping = target.object[ target.Name ].mapping = target.object[ target.name ]() // must call getter function explicitly
-        
-        if( typeof from.object.track !== 'undefined' ) {
-          mapping.follow = from.object.track
-          mapping.follow.count++
-        } else {
-          mapping.follow = new Gibberish.Follow({ input:from.object, useAbsoluteValue: true })
-          mapping.follow.count = 1
-        }
-        from.object.track = mapping.follow
-        
-        mapping.input = target.object[ target.Name ].mapping.follow
-        
-        mapping.remove = function( doNotSet ) {
-          if( !doNotSet ) {
-            target.object[ target.name ] = target.object[ target.Name ].mapping.getValue()
-          }
-          
-          if( mapping.bus )
-            mapping.bus.disconnect()
-          
-          if( mapping.follow ) {
-            mapping.follow.count--
-            if( mapping.follow.count === 0) {
-              delete from.object.track
-              mapping.follow.remove()
-            }
-          }
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        mapping.replace = function( replacementObject, key, Key  ) {
-          mapping.follow.input = replacementObject   
-          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )            
-        }
-      
-        var env = mapping.follow.bufferSize
-        Object.defineProperty( target.object[ target.Name ], 'env', {
-          configurable:true,
-          get: function() { return env },
-          set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
-        })
-                
-        return mapping
-      }
-    },
-    graphics: {
-      graphics: function( target, from ) {
-        // rewrite getValue function of Map object to call Map callback and then return appropriate value
-        var map = Map( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
-            old = map.getValue.bind( map ),
-            mapping
-        
-        map.getValue = function() {
-          //console.log( from.name, from, target.min, target.max, from.min, from.max )
-          map.callback( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
-          return old()
-        }
-        
-        mapping = target.object[ target.Name ].mapping = map
-        
-        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
-          target.object.mod( target.name, mapping, '=' )
-        }else{
-          target.modObject.mod( target.modName, mapping, '=' )
-        }
-        
-        mapping.remove = function() {
-          if( target.object.mod ) {
-            target.object.removeMod( target.name )
-          }else{
-            target.modObject.removeMod( target.modName )
-          }
-          target.object[ target.name ] = target.object[ target.Name ].mapping.getValue()
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        mapping.replace = function( replacementObject, key, Key  ) { mapping.input = replacementObject }
-        
-        return mapping
-      },
-      interface: function( target, from ) {
-        // console.log( "FROM", from.name, target.min, target.max, from.min, from.max )
-        var _map = Map( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
-            mapping
-            
-        if( typeof from.object.functions === 'undefined' ) {
-          from.object.functions = {}
-          from.object.onvaluechange = function() {
-            for( var key in from.object.functions ) {
-              from.object.functions[ key ]()
-            }
-          }
-        }
-
-        mapping = target.object[ target.Name ].mapping = _map
-
-        target.mapping.from = from
-        
-        var fcn_name = target.name + ' <- ' + from.object.name + '.' + from.Name
-
-        from.object.functions[ fcn_name ] = function() {
-          var val = mapping.callback( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
-          // target.object[ target.Name ].value = val
-          // console.log( target.Name )
-          target.object[ target.Name ].oldSetter.call( target.object[ target.Name ], val )
-        }
-        // from.object.onvaluechange = function() {          
-        //   var val = map.callback( this[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
-        //   target.object[ target.name ] = val
-        // }
-        mapping.replace = function() {
-          // var old = from.functions[ target.Name ]
-        } 
-        
-        mapping.remove  = function() {
-          console.log( "mapping removed" )
-          delete from.object.functions[ fcn_name ]
-        } 
-        
-        if( from.object.setValue ) 
-          from.object.setValue( target.object[ target.name ] )
-        
-        // if( typeof from.object.label !== 'undefined' ) {
-        //   from.object.label = target.object.name + '.' + target.Name
-        // }
-        if( typeof from.object.label !== 'undefined' ) { 
-          var labelString = ''
-          for( var i = 0; i < from.targets.length; i++ ) {
-            var __target = from.targets[ i ]
-            labelString += __target[0].object.name + '.' + __target[1]
-            if( i !== from.targets.length - 1 ) labelString += ' & '
-          }
-          from.object.label = labelString
-        }
-        
-        return mapping
-      },
-      audio: function( target, from ) {
-        var mapping
-        
-        mapping = target.object[ target.Name ].mapping = Map( null, target.min, target.max, from.min, from.max, target.output, from.wrap )
-      
-        mapping.follow = typeof from.object.track !== 'undefined' ? from.object.track : new Gibberish.Follow({ input:from.object.properties[ from.name ], useAbsoluteValue: false })
-        from.object.track = target.object[ target.Name ].mapping.follow
-        // assign input after Map ugen is created so that follow can be assigned to the mapping object
-        mapping.input = mapping.follow
-      
-        mapping.bus = new Gibberish.Bus2({ amp:0 }).connect()
-
-        mapping.connect( mapping.bus )
-        
-        mapping.replace = function( replacementObject, key, Key ) {
-          mapping.follow.input = replacementObject            
-          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )
-        }
-        
-        var env = mapping.follow.bufferSize
-        Object.defineProperty( target.object[ target.Name ], 'env', {
-          get: function() { return env },
-          set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
-        })
-        
-        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
-          //console.log( target.object, target.object.mod )
-          target.object.mod( target.name, mapping, '=' )
-        }else{
-          target.modObject.mod( target.modName, mapping, '=' )
-        }
-        
-        mapping.remove = function() {
-          this.bus.disconnect()
-          
-          if( this.follow ) {
-            this.follow.count--
-            if( this.follow.count === 0) {
-              delete from.object.track
-              this.follow.remove()
-            }
-          }
-
-          if( target.object.mod ) {
-            target.object.removeMod( target.name )
-          }else{
-            target.modObject.removeMod( target.modName )
-          }
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        return mapping
-      },
-      audioOut : function( target, from ) {
-        console.log( target.Name, target.object )
-        if( typeof target.object[ target.Name ].mapping === 'undefined') {
-          console.log("MAKING A MAPPING")
-          var mapping = target.object[ target.Name ].mapping = Map( null, target.min, target.max, 0, 1, 0 )   
-          if( typeof from.object.track !== 'undefined' ) {
-            mapping.follow = from.object.track
-            mapping.follow.count++
-          } else {
-            mapping.follow = new Gibberish.Follow({ input:from.object })
-            mapping.follow.count = 1
-          }
-          from.object.track = mapping.follow
-          
-          var env = mapping.follow.bufferSize
-          Object.defineProperty( target.object[ target.Name ], 'env', {
-            configurable: true,
-            get: function() { return env },
-            set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
-          })
-          
-          mapping.input = mapping.follow
-          mapping.bus = new Gibberish.Bus2({ amp:0 }).connect()
-          mapping.connect( mapping.bus )
-        
-          mapping.replace = function( replacementObject, key, Key  ) {
-            // _console.log( key, replacementObject )
-            
-            // what if new mapping isn't audio type?
-            if ( replacementObject[ Key ].timescale === from.timescale ) {
-              var idx = mapping.follow.input[ from.Name ].targets.indexOf( target )
-              if( idx >= -1 ) {
-                mapping.follow.input[ from.Name ].targets.splice( idx, 1 )
-              }
-            
-              mapping.follow.input = replacementObject   
-              if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )            
-            }else{
-              mapping.bus.disconnect()
-              mapping.follow.remove()
-              Gibber.createMappingObject( target, replacementObject )
-            }
-            
-          }
-        }else{
-          console.log("REPLACING MAPPING")
-          mapping.replace( from.object, from.name, from.Name )
-          return mapping
-        }
-        
-        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
-          //console.log( target.object, target.object.mod )
-          target.object.mod( target.name, mapping, '=' )
-        }else if (target.modObject) {
-          target.modObject.mod( target.modName, mapping, '=' )
-        }else{
-          !function() {
-            var _mapping = mapping
-            target.object.update = function() { 
-              target.object[ target.name ]( _mapping.getValue() )
-            }
-          }()
-          //target.object.mod( target.name, mapping, '=' ) 
-        }
-        
-        //target.object[ target.Name ].mapping = mapping
-        
-        mapping.remove = function() {
-          this.bus.disconnect()
-          
-          if( this.follow ) {
-            this.follow.count--
-            if( this.follow.count === 0) {
-              delete from.object.track
-              this.follow.remove()
-            }
-          }
-
-          if( target.object.mod ) {
-            target.object.removeMod( target.name )
-          }else if( target.modObject ) {
-            target.modObject.removeMod( target.modName )
-          }else{
-            console.log( 'removing update ')
-            //target.object.update = function() {}
-          }
-          
-          delete target.object[ target.Name ].mapping
-        }
-        return mapping
-      }
-    },
-    notation: {
-      graphics: function( target, from ) {
-        // rewrite getValue function of Map object to call Map callback and then return appropriate value
-
-        var map = Map( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
-            old = map.getValue.bind( map ),
-            mapping
-        
-        map.getValue = function() {
-          map.callback( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
-          return old()
-        }
-        
-        mapping = target.object[ target.Name ].mapping = map
-        
-        if( target.object.mod ) { // second case accomodates modding individual [0][1][2] properties fo vectors
-          target.object.mod( target.name, mapping, '=' )
-        }else{
-          target.modObject.mod( target.modName, mapping, '=' )
-        }
-        
-        mapping.remove = function() {
-          if( target.object.mod ) {
-            target.object.removeMod( target.name )
-          }else{
-            target.modObject.removeMod( target.modName )
-          }
-          target.object[ target.name ] = target.object[ target.Name ].mapping.getValue()
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        mapping.replace = function( replacementObject, key, Key  ) { mapping.input = replacementObject }
-        
-        return mapping
-      },
-      interface: function( target, from ) {
-        // console.log( "FROM", from.name, target.min, target.max, from.min, from.max )
-        var _map = Map( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap ),
-            mapping
-            
-        if( typeof from.object.functions === 'undefined' ) {
-          from.object.functions = {}
-          from.object.onvaluechange = function() {
-            for( var key in from.object.functions ) {
-              from.object.functions[ key ]()
-            }
-          }
-        }
-
-        mapping = target.object[ target.Name ].mapping = _map
-
-        target.mapping.from = from
-        
-        var fcn_name = target.name + ' <- ' + from.object.name + '.' + from.Name
-
-        from.object.functions[ fcn_name ] = function() {
-          var val = mapping.callback( from.object[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
-          // target.object[ target.Name ].value = val
-          // console.log( target.Name )
-          target.object[ target.Name ].oldSetter.call( target.object[ target.Name ], val )
-        }
-        // from.object.onvaluechange = function() {          
-        //   var val = map.callback( this[ from.name ], target.min, target.max, from.min, from.max, target.output, from.wrap )
-        //   target.object[ target.name ] = val
-        // }
-        mapping.replace = function() {
-          // var old = from.functions[ target.Name ]
-        } 
-        
-        mapping.remove  = function() {
-          console.log( "mapping removed" )
-          delete from.object.functions[ fcn_name ]
-        } 
-        
-        if( from.object.setValue ) 
-          from.object.setValue( target.object[ target.name ] )
-        
-        // if( typeof from.object.label !== 'undefined' ) {
-        //   from.object.label = target.object.name + '.' + target.Name
-        // }
-        if( typeof from.object.label !== 'undefined' ) { 
-          var labelString = ''
-          for( var i = 0; i < from.targets.length; i++ ) {
-            var __target = from.targets[ i ]
-            labelString += __target[0].object.name + '.' + __target[1]
-            if( i !== from.targets.length - 1 ) labelString += ' & '
-          }
-          from.object.label = labelString
-        }
-        
-        return mapping
-      },
-      audio: function( target, from ) {
-        var mapping
-        
-        mapping = target.object[ target.Name ].mapping = Map( null, target.min, target.max, from.min, from.max, target.output, from.wrap )
-  
-        if( typeof from.object.track !== 'undefined' && from.object.track.input === from.object.properties[ from.name ] ) {
-          mapping.follow = from.object.track
-          mapping.follow.count++
-        }else{
-          mapping.follow = new Gibberish.Follow({ input:from.object.properties[ from.name ], useAbsoluteValue: false })
-          mapping.follow.count = 1
-        }
-        
-        from.object.track = target.object[ target.Name ].mapping.follow
-        
-        // assign input after Map ugen is created so that follow can be assigned to the mapping object
-        mapping.input = mapping.follow
-      
-        mapping.bus = new Gibberish.Bus2({ amp:0 }).connect()
-
-        mapping.connect( mapping.bus )
-        
-        mapping.replace = function( replacementObject, key, Key ) {
-          mapping.follow.input = replacementObject            
-          if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )
-        }
-        
-        var env = mapping.follow.bufferSize
-        Object.defineProperty( target.object[ target.Name ], 'env', {
-          get: function() { return env },
-          set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
-        })
-        
-        mapping.update = function() {   
-          target.object[ target.name ]( mapping.getValue() )
-        }
-        mapping.text = target.object
-
-        // let Notation object handle scheduling updates
-        Gibber.Environment.Notation.add( mapping )
-        
-        mapping.remove = function() {
-          this.bus.disconnect()
-          
-          if( this.follow ) {
-            this.follow.count--
-            if( this.follow.count === 0) {
-              delete from.object.track
-              this.follow.remove()
-            }
-          }
-          
-          Gibber.Environment.Notation.remove( mapping )
-          
-          delete target.object[ target.Name ].mapping
-        }
-        
-        return mapping
-      },
-      audioOut : function( target, from ) {
-        if( typeof target.object[ target.Name ].mapping === 'undefined') {
-          var mapping = target.object[ target.Name ].mapping = Map( null, target.min, target.max, 0, 1, 0 )
-          
-          console.log( "MAPPING", from )
-          
-          if( typeof from.object.track !== 'undefined' && from.object.track.input === from.object.properties[ from.name ] ) {
-            mapping.follow = from.object.track
-            mapping.follow.count++
-          }else{
-            mapping.follow = new Gibberish.Follow({ input:from.object, useAbsoluteValue: true })
-            mapping.follow.count = 1
-          }
-          
-          from.object.track = mapping.follow
-          
-          var env = mapping.follow.bufferSize
-          Object.defineProperty( target.object[ target.Name ], 'env', {
-            configurable:true,
-            get: function() { return env },
-            set: function(v) { env = Gibber.Clock.time( v ); mapping.follow.bufferSize = env; }
-          })
-          
-          mapping.input = mapping.follow
-          mapping.bus = new Gibberish.Bus2({ amp:0 }).connect()
-          mapping.connect( mapping.bus )
-        
-          mapping.replace = function( replacementObject, key, Key  ) {
-            // _console.log( key, replacementObject )
-            
-            // what if new mapping isn't audio type?
-            if ( replacementObject[ Key ].timescale === from.timescale ) {
-              var idx = mapping.follow.input[ from.Name ].targets.indexOf( target )
-              if( idx >= -1 ) {
-                mapping.follow.input[ from.Name ].targets.splice( idx, 1 )
-              }
-            
-              mapping.follow.input = replacementObject   
-              if( replacementObject[ Key ].targets.indexOf( target ) === -1 ) replacementObject[ Key ].targets.push( [target, target.Name] )            
-            }else{
-              mapping.bus.disconnect()
-              mapping.follow.remove()
-              Gibber.createMappingObject( target, replacementObject )
-            }
-            
-          }
-        }else{
-          mapping.replace( from.object, from.name, from.Name )
-          return mapping
-        }
-        
-        mapping.update = function() {   
-          target.object[ target.name ]( mapping.getValue() )
-        }
-        mapping.text = target.object
-
-        // let Notation object handle scheduling updates
-        Gibber.Environment.Notation.add( mapping )
-        
-        mapping.remove = function() {
-          this.bus.disconnect()
-          
-          if( this.follow ) {
-            this.follow.count--
-            if( this.follow.count === 0) {
-              delete from.object.track
-              this.follow.remove()
-            }
-          }
-          
-          Gibber.Environment.Notation.remove( mapping )
-          
-          delete target.object[ target.Name ].mapping
-        }
-        return mapping
-      }
-    },
-  } 
-  
-  return mappings
-}
-
-module.exports.outputCurves= {
-  LINEAR:0,
-  LOGARITHMIC:1
-}
-},{}],9:[function(_dereq_,module,exports){
-!function() {
-"use strict"
-
-var soloGroup = [],
-    isSoloing = false,
-    Gibber,
-    $ = _dereq_( './dollar' ),
-    Synths = { Presets: {} },
-    Clock = _dereq_('./clock')( Gibber ),
-    rnd = Math.random,
-
-    Utilities = {
-      seq : function() {
-        var arg = arguments[0],
-            type = typeof arg,
-            list = [],
-            output = null
-    
-        if( type === 'object' ) {
-          if( Array.isArray( arg ) ) type = 'array'
-        }
-    
-        // switch( type ) {
-        //   case 'function':
-        //     output = arg
-        //     break;
-        //   case 'array':
-        //     for( var i = 0; i < arg.length; i++ ) {
-        //       var elem = arg[ i ]
-        //       if( typeof )
-        //     }
-        //     break;
-        //   default: 
-        //     output = function() { return arg }
-        //     break;
-        // }
-    
-        return output
-      },
-      random :  function() {
-        var dict = {},
-            lastChosen = null;
-    
-        for(var i = 0; i < arguments.length; i+=2) {
-          dict[ "" + arguments[i] ] = { repeat: arguments[i+1], count: 0 };
-        }
-
-        this.pick = function() {
-          var value = 0, index, lastValue;
-          if(this[lastChosen]) lastValue = this[lastChosen]
-
-          if(lastChosen !== null && dict[ lastValue ].count++ <= dict[ lastValue ].repeat) {
-            index = lastChosen;
-            if( dict[ lastValue ].count >= dict[ lastValue ].repeat) {
-              dict[ lastValue ].count = 0;
-              lastChosen = null;
-            };
-          }else{
-            index = Utilities.rndi(0, this.length - 1);
-            value = this[index];
-            if( typeof dict[ ""+value ] !== 'undefined' ) {
-              dict[ ""+value ].count = 1;
-              lastChosen = index;
-            }else{
-              lastChosen = null;
-            }
-          }
-      
-        	return index; // return index, not value as required by secondary notation stuff
-        };
-    
-        return this;
-      },
-  
-      random2 : function() {
-        var dict = {},
-            lastChosen = null,
-            that = this;
-    
-        for(var i = 0; i < arguments.length; i+=2) {
-          dict[ "" + arguments[i] ] = { repeat: arguments[i+1], count: 0 };
-        }
-
-        this.pick = function() {
-          var value = 0, index, lastValue;
-          if(that[lastChosen]) lastValue = that[lastChosen]
-
-          if(lastChosen !== null && dict[ lastValue ].count++ <= dict[ lastValue ].repeat) {
-            index = lastChosen;
-            if( dict[ lastValue ].count >= dict[ lastValue ].repeat) {
-              dict[ lastValue ].count = 0;
-              lastChosen = null;
-            };
-          }else{
-            index = Utilities.rndi(0, that.length - 1);
-            value = that[index];
-            if( typeof dict[ ""+value ] !== 'undefined' ) {
-              dict[ ""+value ].count = 1;
-              lastChosen = index;
-            }else{
-              lastChosen = null;
-            }
-          }
-      
-        	return that[ index ]; // return index, not value as required by secondary notation stuff
-        }
-    
-        return this.pick
-      },
-  
-      choose: function( length ) {
-        var output = null
-    
-        if( isNaN( length ) ) length = 1
-    
-        if( length !== 1 ) {
-          var arr = []
-    
-          for( var i = 0; i < length; i++ ) {
-            arr[ i ] = this[ Utilities.rndi( 0, this.length - 1 ) ]
-          }
-      
-          output = arr
-        }else{
-          output = this[ Utilities.rndi( 0, this.length - 1 ) ]
-        }
-    
-      	return output;
-      },
-
-      future : function(func, time) { 
-        var count = 0
-        
-        var __seq = Gibber.Audio.Seqs.Seq(
-          function() {
-            if( count === 1 ) {
-              func()
-              __seq.stop()
-              __seq.disconnect()
-            }
-            count++
-          }, 
-          Gibber.Audio.Clock.time( time ) 
-        )
-    
-        return function(){ __seq.stop(); __seq.disconnect(); }
-      },
-  
-      shuffle : function( arr ) {
-      	for(var j, x, i = arr.length; i; j = parseInt(Math.random() * i), x = arr[--i], arr[i] = arr[j], arr[j] = x);
-      },
-  
-      solo : function( ugen ) {
-        var args = Array.prototype.slice.call( arguments, 0 );
-        if( ugen ) {
-          if( isSoloing ) { Utilities.solo(); } // quick toggle on / off
-      
-          for( var j = 0; j < args.length; j++ ) { // check if user soloed ugen, but fx is actually feeding Master bus
-            var arg = args[ j ]
-            if( arg.fx.length > 0 ) { 
-              args[j] = arg.fx[ arg.fx.length - 1 ] // get last fx in chain
-            }
-          }
-      
-          for(var i = 0; i < Master.inputs.length; i++) {
-            //console.log( i, Master.inputs[i] )
-            var idx = args.indexOf( Master.inputs[i].value ),
-                _ugen = Master.inputs[i].value,
-                name = _ugen.name
-            
-            if( idx === -1 ) {
-              if( name !== 'polyseq' &&  name !== 'Seq' ) { // TODO: please, please, don't route seqs into master bus...
-                Master.inputs[i].value = Mul( Master.inputs[i].value, 0 )
-                soloGroup.push( Master.inputs[i] );
-              }
-            }
-          }
-          isSoloing = true;
-        }else{
-          for( var i = 0; i < soloGroup.length; i++ ) {
-            soloGroup[i].value = soloGroup[i].value[0]
-          }
-          soloGroup.length = 0
-          isSoloing = false;
-        } 
-      },
-      fill : function( length, fnc ) {
-        if( isNaN( length ) ) length = 16
-        if( typeof fnc !== 'function' ) { fnc = Rndf() }
-    
-        fnc = fnc.bind( this )
-    
-        for( var i = 0; i < length; i++ ) {
-          this[ i ] = fnc()
-        }
-    
-        return this
-      },
-      merge : function() {
-        var output = []
-      	for( var i = 0; i < this.length; i++ ) {
-          var arg = this[ i ]
-          if( Array.isArray( arg ) ) {
-            for( var j = 0; j < arg.length; j++ ) {
-      				output.push( arg[ j ] )
-            }
-          }else{
-            output.push( arg )
-          }
-        }
-  
-        return output
-      },
-      weight : function() {
-        var weights = Array.prototype.slice.call( arguments, 0 )
-        this.pick = function() {
-          var returnValue = this[0],
-              total = 0,
-              _rnd = Utilities.rndf();
-  
-          for(var i = 0; i < weights.length; i++) {
-            total += weights[i];
-            if( _rnd < total ) { 
-              returnValue = i;
-              break;
-            }
-          }
-          return returnValue;
-        }
-    
-      	return this
-      },
-      gibberArray: function( arr ) {
-        
-      },
-      rndf : function(min, max, number, canRepeat) {
-        canRepeat = typeof canRepeat === "undefined" ? true : canRepeat;
-      	if(typeof number === "undefined" && typeof min != "object") {
-      		if(arguments.length == 1) {
-      			max = arguments[0]; min = 0;
-      		}else if(arguments.length == 2) {
-      			min = arguments[0];
-      			max = arguments[1];
-      		}else{
-      			min = 0;
-      			max = 1;
-      		}
-
-      		var diff = max - min,
-      		    r = Math.random(),
-      		    rr = diff * r
-	
-      		return min + rr;
-      	}else{
-      		var output = [];
-      		var tmp = [];
-      		if(typeof number === "undefined") {
-      			number = max || min.length;
-      		}
-		
-      		for(var i = 0; i < number; i++) {
-      			var num;
-      			if(typeof arguments[0] === "object") {
-      				num = arguments[0][rndi(0, arguments[0].length - 1)];
-      			}else{
-      				if(canRepeat) {
-      					num = Utilities.rndf(min, max);
-      				}else{
-                num = Utilities.rndf(min, max);
-                while(tmp.indexOf(num) > -1) {
-                  num = Utilities.rndf(min, max);
-                }
-      					tmp.push(num);
-      				}
-      			}
-      			output.push(num);
-      		}
-      		return output;
-      	}
-      },
-  
-      Rndf : function() {
-        var _min, _max, quantity, random = Math.random, canRepeat;
-    
-        if(arguments.length === 0) {
-          _min = 0; _max = 1;
-        }else if(arguments.length === 1) {
-          _max = arguments[0]; _min = 0;
-        }else if(arguments.length === 2) {
-          _min = arguments[0]; _max = arguments[1];
-        }else if(arguments.length === 3) {
-          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2];
-        }else{
-          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2]; canRepeat = arguments[3];
-        }    
-  
-        return function() {
-          var value, min, max, range;
-    
-          min = typeof _min === 'function' ? _min() : _min
-          max = typeof _max === 'function' ? _max() : _max
-      
-          if( typeof quantity === 'undefined') {
-            value = Utilities.rndf( min, max )
-          }else{
-            value = Utilities.rndf( min, max, quantity, canRepeat )
-          }
-    
-          return value;
-        }
-      },
-
-      rndi : function( min, max, number, canRepeat ) {
-        var range;
-    
-        if(arguments.length === 0) {
-          min = 0; max = 1;
-        }else if(arguments.length === 1) {
-          max = arguments[0]; min = 0;
-        }else if( arguments.length === 2 ){
-          min = arguments[0]; max = arguments[1];
-        }else{
-          min = arguments[0]; max = arguments[1]; number = arguments[2]; canRepeat = arguments[3];
-        }    
-  
-        range = max - min
-        if( range < number ) canRepeat = true
-  
-        if( typeof number === 'undefined' ) {
-          range = max - min
-          return Math.round( min + Math.random() * range );
-        }else{
-      		var output = [];
-      		var tmp = [];
-		
-      		for(var i = 0; i < number; i++) {
-      			var num;
-      			if(canRepeat) {
-      				num = Utilities.rndi(min, max);
-      			}else{
-      				num = Utilities.rndi(min, max);
-      				while(tmp.indexOf(num) > -1) {
-      					num = Utilities.rndi(min, max);
-      				}
-      				tmp.push(num);
-      			}
-      			output.push(num);
-      		}
-      		return output;
-        }
-      },
-
-      Rndi : function() {
-        var _min, _max, quantity, random = Math.random, round = Math.round, canRepeat, range;
-    
-        if(arguments.length === 0) {
-          _min = 0; _max = 1;
-        }else if(arguments.length === 1) {
-          _max = arguments[0]; _min = 0;
-        }else if(arguments.length === 2) {
-          _min = arguments[0]; _max = arguments[1];
-        }else if(arguments.length === 3) {
-          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2];
-        }else{
-          _min = arguments[0]; _max = arguments[1]; quantity = arguments[2]; canRepeat = arguments[3];
-        }  
-  
-        range = _max - _min
-        if( typeof quantity === 'number' && range < quantity ) canRepeat = true
-  
-        return function() {
-          var value, min, max, range;
-    
-          min = typeof _min === 'function' ? _min() : _min
-          max = typeof _max === 'function' ? _max() : _max
-    
-          if( typeof quantity === 'undefined') {
-            value = Utilities.rndi( min, max )
-          }else{
-            value = Utilities.rndi( min, max, quantity, canRepeat )
-          }
-    
-          return value;
-        }
-      },
-      export : function( target ) {
-        target.rndi = Utilities.rndi
-        target.rndf = Utilities.rndf
-        target.Rndi = Utilities.Rndi
-        target.Rndf = Utilities.Rndf
-        
-        target.future = Utilities.future
-        target.solo = Utilities.solo
-      },
-      init: function() {
-        // window.solo = Utilities.solo
-        // window.future = Utilities.future // TODO: fix global reference
-        Array.prototype.random = Array.prototype.rnd = Utilities.random
-        Array.prototype.weight = Utilities.weight
-        Array.prototype.fill = Utilities.fill
-        Array.prototype.choose = Utilities.choose
-        // Array.prototype.Rnd = Utilities.random2
-        Array.prototype.merge = Utilities.merge
-      }  
-    }
-
-  module.exports = function( __Gibber ) { if( typeof Gibber === 'undefined' ) { Gibber = __Gibber; } return Utilities }
-
-}()
-
-},{"./clock":4,"./dollar":5}]},{},[6])
-(6)
+},{"./autogui":7,"interface.js":5}]},{},[8])
+(8)
 });

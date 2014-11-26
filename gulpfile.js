@@ -6,8 +6,8 @@ var browserify = require( 'gulp-browserify' ),
     insert = require( 'gulp-insert' );
 
 gulp.task( 'client', function(){
-  var out = gulp.src( './scripts/gibber/gibber.js')
-    .pipe( browserify({ standalone:'Gibber', bare:true, ignore:'./graphics/graphics' }) )
+  var out = gulp.src( './scripts/gibber/interface.lib.js')
+    .pipe( browserify({ standalone:'Gibber', bare:true }) )
     .pipe( rename('gibber.interface.lib.js') )
     .pipe( gulp.dest('./build/') )
     .pipe( buffer() )

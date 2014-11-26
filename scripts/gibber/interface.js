@@ -1,7 +1,9 @@
-var $ = require('../dollar')
-
 module.exports = function( Gibber ) {
-   
+  console.log( "GIBBER", Gibber )
+  
+  var $ = Gibber.dollar,
+      mouse = require( './mouse.js' ) // delay initialization until export
+  
   // $script( 'external/autogui' , function() {
   //   Gibber.interfaceIsReady()
   // } )
@@ -19,7 +21,7 @@ module.exports = function( Gibber ) {
   var Interface = require( 'interface.js' )
   
   var I = {
-    autogui: require( '../../external/autogui' )( Gibber ),
+    autogui: require( './autogui' )( Gibber ),
     mode : 'local',
     client: 0,
     panel : null,
@@ -36,16 +38,18 @@ module.exports = function( Gibber ) {
           column = Layout.addColumn()
         }
       }else{
-        $( column.bodyElement ).empty()
+        column.bodyElement.innerHTML = ''
+        //$( column.bodyElement ).empty()
       }
+      
+      if( column.bodyElement.length ) column.bodyElement = column.bodyElement[ 0 ]
       
       var panel = new Interface.Panel({ container: column.bodyElement, useRelativeSizesAndPositions:true, font:'normal 16px Helvetica' })
       
-        panel.canvas.style.position = 'relative'
-        panel.canvas.style.width = column.bodyElement.innerWidth
-        panel.canvas.style.height = column.bodyElement.innerHeight
-      
-      
+      panel.canvas.style.position = 'relative'
+      panel.canvas.style.width = column.bodyElement.style.width
+      panel.canvas.style.height = column.bodyElement.style.height
+            
       this.panel = panel
       this.panel.column = column
       
@@ -400,7 +404,7 @@ module.exports = function( Gibber ) {
               property = mappingProperties[ prop ],
               mapping = $.extend( {}, property, {
                 Name  : prop.charAt(0).toUpperCase() + prop.slice(1),
-                name  : prop,
+                propertyName  : prop,
                 type  : 'mapping',
                 value : 1,
                 object: w,
@@ -436,8 +440,8 @@ module.exports = function( Gibber ) {
                 for( var j = 0; j < mapping.targets.length; j++ ) {
                   var _mapping = mapping.targets[ j ]
             
-                  if( replacement.mappingProperties[ mapping.name ] ) {
-                    _mapping[ 0 ].mapping.replace( replacement, mapping.name, mapping.Name )
+                  if( replacement.mappingProperties[ mapping.propertyName ] ) {
+                    _mapping[ 0 ].mapping.replace( replacement, mapping.propertyName, mapping.Name )
                   }else{ // replacement object does not have property that was assigned to mapping
                     _mapping[ 0 ].mapping.remove()
                   }
@@ -540,7 +544,7 @@ module.exports = function( Gibber ) {
             
             $.extend( mapping, {
               Name  : prop.charAt(0).toUpperCase() + prop.slice(1),
-              name  : prop,
+              propertyName  : prop,
               type  : 'mapping',
               value : 1,
               object: w,
@@ -694,7 +698,8 @@ module.exports = function( Gibber ) {
       target.VBox     = I.vbox
       target.Crossfader = I.crossfader
       target.Accelerometer = I.accelerometer
-      target.Orientation = I.orientation  
+      target.Orientation = I.orientation
+      target.Mouse    = mouse( Gibber )
     }
   }
   
