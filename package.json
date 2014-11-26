@@ -1,6 +1,6 @@
 {
   "name": "gibber.interface.lib",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "standalone client interface library from Gibber",
   "repository": {
     "type": "git",
