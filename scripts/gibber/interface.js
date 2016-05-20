@@ -1,6 +1,4 @@
 module.exports = function( Gibber ) {
-  console.log( "GIBBER", Gibber )
-  
   var $ = Gibber.dollar,
       mouse = require( './mouse.js' ) // delay initialization until export
   
@@ -35,7 +33,7 @@ module.exports = function( Gibber ) {
             bodyElement: document.querySelector( 'body' )
           }
         }else{
-          column = Layout.addColumn()
+          column = Layout.addColumn({ type:'interface'})
         }
       }else{
         column.bodyElement.innerHTML = ''
